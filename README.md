@@ -2,6 +2,8 @@
 
 This repo will hopefully someday contain a markdown parsing library.
 
+The code is distributed under the MIT license.
+
 ## Usage
 
 The use of the library is as follows:
@@ -13,6 +15,8 @@ The use of the library is as follows:
     const a : std.mem.Allocator = ...;
 
     var it = try parseFile(ta, "myfile.md");
+    defer it.deinit();
+    
     while (true) {
         const elem = try next(&it);
 
@@ -38,9 +42,14 @@ The Element is declared as such :
 
 where `ElemType` is an `enum` (look the source for details).
 
-## Functionbalities
+## Functionnalities
+
+The reference used to the markdeown syntax is [https://www.markdownguide.org/basic-syntax/](https://www.markdownguide.org/basic-syntax/).
 
 At the moment, the following markdown tags are supported:
 
 - ordinary paragraphs
-- headins (level 1 to 6)
+- headings (level 1 to 6)
+- blockquotes (partial implementation)
+
+warning: UTF-8 is not supported (yet).

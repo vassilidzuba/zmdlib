@@ -21,10 +21,12 @@ const State = enum {
     leavinghead4,
     leavinghead5,
     leavinghead6,
+    inblockquote,
+    leavingblockquote,
     end,
 };
 
-const ElemType = enum {
+pub const ElemType = enum {
     startDocument,
     endDocument,
     startHead1,
@@ -33,28 +35,37 @@ const ElemType = enum {
     startHead4,
     startHead5,
     startHead6,
+    startBlockquote,
     endHead1,
     endHead2,
     endHead3,
     endHead4,
     endHead5,
     endHead6,
+    endBlockquote,
     startPara,
     endPara,
     text,
     bad,
 };
 
-const Element = struct {
+pub const Element = struct {
     type: ElemType,
     content: ?[]const u8 = null,
 };
 
-const Iterator = struct {
+pub const Iterator = struct {
+    allocator: ?std.mem.Allocator = null,
     tobefreed: ?[]u8 = null,
     data: []const u8,
     pos: usize = 0,
     state: State = State.start,
+
+    pub fn deinit(self: *Iterator) void {
+        if (self.tobefreed) |tobefreed| {
+            self.allocator.?.free(tobefreed);
+        }
+    }
 };
 
 pub fn parse(text: []const u8) !Iterator {
@@ -71,12 +82,13 @@ pub fn parseFile(allocator: std.mem.Allocator, path: [:0]const u8) !Iterator {
     _ = try file.readAll(buffer);
 
     return Iterator{
+        .allocator = allocator,
         .tobefreed = buffer,
         .data = buffer,
     };
 }
 
-fn next(self: *Iterator) !Element {
+pub fn next(self: *Iterator) !Element {
     if (self.state == State.start) {
         self.*.state = State.indoc;
         return Element{
@@ -88,34 +100,57 @@ fn next(self: *Iterator) !Element {
             return Element{
                 .type = ElemType.endDocument,
             };
-        } else if (self.data[self.pos] == '#') {
-            if (peek(self, "######")) {
+        }
+
+        while (self.data[self.pos] == '\n' or self.data[self.pos] == '\n') {
+            skipNL(self);
+        }
+
+        if (self.data[self.pos] == '#') {
+            if (peek(self, "#######")) {
+                self.state = State.inpara;
+                return Element{
+                    .type = ElemType.startPara,
+                };
+            } else if (peek(self, "######")) {
                 self.state = State.inhead6;
+                skipBytes(self, 6);
+                skipSpaces(self);
                 return Element{
                     .type = ElemType.startHead6,
                 };
             } else if (peek(self, "#####")) {
                 self.state = State.inhead5;
+                skipBytes(self, 6);
+                skipSpaces(self);
                 return Element{
                     .type = ElemType.startHead5,
                 };
             } else if (peek(self, "####")) {
                 self.state = State.inhead4;
+                skipBytes(self, 4);
+                skipSpaces(self);
                 return Element{
                     .type = ElemType.startHead4,
                 };
             } else if (peek(self, "###")) {
                 self.state = State.inhead3;
+                skipBytes(self, 3);
+                skipSpaces(self);
                 return Element{
                     .type = ElemType.startHead3,
                 };
             } else if (peek(self, "##")) {
                 self.state = State.inhead2;
+                skipBytes(self, 2);
+                skipSpaces(self);
                 return Element{
                     .type = ElemType.startHead2,
                 };
             } else if (peek(self, "#")) {
                 self.state = State.inhead1;
+                skipBytes(self, 1);
+                skipSpaces(self);
                 return Element{
                     .type = ElemType.startHead1,
                 };
@@ -125,7 +160,15 @@ fn next(self: *Iterator) !Element {
                     .type = ElemType.startPara,
                 };
             }
+        } else if (peek(self, ">")) {
+            self.state = State.inblockquote;
+            skipBytes(self, 1);
+            skipSpaces(self);
+            return Element{
+                .type = ElemType.startBlockquote,
+            };
         } else {
+            std.debug.print("---> {s}\n", .{self.data[self.pos .. self.pos + 4]});
             self.state = State.inpara;
             return Element{
                 .type = ElemType.startPara,
@@ -202,6 +245,16 @@ fn next(self: *Iterator) !Element {
         };
         self.pos = self.pos + 1;
         return elem;
+    } else if (self.state == State.inblockquote) {
+        self.state = State.leavingblockquote;
+        const posstart = self.pos;
+        skipEndOfLine(self);
+        const elem = Element{
+            .type = ElemType.text,
+            .content = self.data[posstart..self.pos],
+        };
+        self.pos = self.pos + 1;
+        return elem;
     } else if (self.state == State.leavingpara) {
         self.state = State.indoc;
         return Element{
@@ -237,11 +290,17 @@ fn next(self: *Iterator) !Element {
         return Element{
             .type = ElemType.endHead6,
         };
+    } else if (self.state == State.leavingblockquote) {
+        self.state = State.indoc;
+        return Element{
+            .type = ElemType.endBlockquote,
+        };
     } else if (self.state == State.end) {
         return Element{
             .type = ElemType.endDocument,
         };
     } else {
+        std.debug.print("unexpected state: {any}\n", .{self.state});
         return CommandLineParserError.BadState;
     }
 }
@@ -253,6 +312,19 @@ fn eod(self: *Iterator) bool {
 fn skipNL(self: *Iterator) void {
     const data = self.data;
     while (self.pos < data.len and (data[self.pos] == '\r' or data[self.pos] == '\n')) {
+        self.pos = self.pos + 1;
+    }
+}
+
+fn skipSpaces(self: *Iterator) void {
+    const data = self.data;
+    while (self.pos < data.len and (data[self.pos] == ' ' or data[self.pos] == '\t')) {
+        self.pos = self.pos + 1;
+    }
+}
+
+fn skipBytes(self: *Iterator, nbbytes: usize) void {
+    for (0..nbbytes) |_| {
         self.pos = self.pos + 1;
     }
 }
@@ -323,7 +395,9 @@ test "one" {
 test "two" {
     const ta = std.testing.allocator;
 
-    var it = try parseFile(ta, "testdata/md01.md");
+    var it = try parseFile(ta, "testdata/md02.md");
+    defer it.deinit();
+
     while (true) {
         const elem = try next(&it);
 
@@ -340,6 +414,4 @@ test "two" {
             break;
         }
     }
-
-    ta.free(it.tobefreed.?);
 }
