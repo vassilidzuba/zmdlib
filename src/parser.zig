@@ -2,6 +2,7 @@ const std = @import("std");
 
 const CommandLineParserError = error{
     BadState,
+    StateStackError,
 };
 
 const State = enum {
@@ -24,6 +25,7 @@ const State = enum {
     inblockquote,
     leavingblockquote,
     end,
+    undef,
 };
 
 pub const ElemType = enum {
@@ -59,11 +61,34 @@ pub const Iterator = struct {
     tobefreed: ?[]u8 = null,
     data: []const u8,
     pos: usize = 0,
-    state: State = State.start,
+    states: [5]State = .{ State.start, State.undef, State.undef, State.undef, State.undef },
+    state_idx: usize = 0,
 
     pub fn deinit(self: *Iterator) void {
         if (self.tobefreed) |tobefreed| {
             self.allocator.?.free(tobefreed);
+        }
+    }
+
+    fn getState(self: *Iterator) State {
+        return self.states[self.state_idx];
+    }
+
+    fn setState(self: *Iterator, state: State) void {
+        self.states[self.state_idx] = state;
+    }
+
+    fn pushState(self: *Iterator, state: State) void {
+        self.state_idx = self.state_idx + 1;
+        self.states[self.state_idx] = state;
+    }
+
+    fn popState(self: *Iterator) !State {
+        if (self.state_idx == 0) {
+            return CommandLineParserError.StateStackError;
+        } else {
+            self.state_idx = self.state_idx - 1;
+            return self.states[self.state_idx];
         }
     }
 };
@@ -89,14 +114,14 @@ pub fn parseFile(allocator: std.mem.Allocator, path: [:0]const u8) !Iterator {
 }
 
 pub fn next(self: *Iterator) !Element {
-    if (self.state == State.start) {
-        self.*.state = State.indoc;
+    if (self.getState() == State.start) {
+        self.setState(State.indoc);
         return Element{
             .type = ElemType.startDocument,
         };
-    } else if (self.state == State.indoc) {
+    } else if (self.getState() == State.indoc) {
         if (eod(self)) {
-            self.state = State.end;
+            self.setState(State.end);
             return Element{
                 .type = ElemType.endDocument,
             };
@@ -108,60 +133,60 @@ pub fn next(self: *Iterator) !Element {
 
         if (self.data[self.pos] == '#') {
             if (peek(self, "#######")) {
-                self.state = State.inpara;
+                self.setState(State.inpara);
                 return Element{
                     .type = ElemType.startPara,
                 };
             } else if (peek(self, "######")) {
-                self.state = State.inhead6;
+                self.setState(State.inhead6);
                 skipBytes(self, 6);
                 skipSpaces(self);
                 return Element{
                     .type = ElemType.startHead6,
                 };
             } else if (peek(self, "#####")) {
-                self.state = State.inhead5;
+                self.setState(State.inhead5);
                 skipBytes(self, 6);
                 skipSpaces(self);
                 return Element{
                     .type = ElemType.startHead5,
                 };
             } else if (peek(self, "####")) {
-                self.state = State.inhead4;
+                self.setState(State.inhead4);
                 skipBytes(self, 4);
                 skipSpaces(self);
                 return Element{
                     .type = ElemType.startHead4,
                 };
             } else if (peek(self, "###")) {
-                self.state = State.inhead3;
+                self.setState(State.inhead3);
                 skipBytes(self, 3);
                 skipSpaces(self);
                 return Element{
                     .type = ElemType.startHead3,
                 };
             } else if (peek(self, "##")) {
-                self.state = State.inhead2;
+                self.setState(State.inhead2);
                 skipBytes(self, 2);
                 skipSpaces(self);
                 return Element{
                     .type = ElemType.startHead2,
                 };
             } else if (peek(self, "#")) {
-                self.state = State.inhead1;
+                self.setState(State.inhead1);
                 skipBytes(self, 1);
                 skipSpaces(self);
                 return Element{
                     .type = ElemType.startHead1,
                 };
             } else {
-                self.state = State.inpara;
+                self.setState(State.inpara);
                 return Element{
                     .type = ElemType.startPara,
                 };
             }
         } else if (peek(self, ">")) {
-            self.state = State.inblockquote;
+            self.setState(State.inblockquote);
             skipBytes(self, 1);
             skipSpaces(self);
             return Element{
@@ -169,13 +194,13 @@ pub fn next(self: *Iterator) !Element {
             };
         } else {
             std.debug.print("---> {s}\n", .{self.data[self.pos .. self.pos + 4]});
-            self.state = State.inpara;
+            self.setState(State.inpara);
             return Element{
                 .type = ElemType.startPara,
             };
         }
-    } else if (self.state == State.inpara) {
-        self.state = State.leavingpara;
+    } else if (self.getState() == State.inpara) {
+        self.setState(State.leavingpara);
         skipNL(self);
         const posstart = self.pos;
         skipEndOfParagraph(self);
@@ -185,8 +210,8 @@ pub fn next(self: *Iterator) !Element {
         };
         self.pos = self.pos + 1;
         return elem;
-    } else if (self.state == State.inhead1) {
-        self.state = State.leavinghead1;
+    } else if (self.getState() == State.inhead1) {
+        self.setState(State.leavinghead1);
         const posstart = self.pos;
         skipEndOfLine(self);
         const elem = Element{
@@ -195,8 +220,8 @@ pub fn next(self: *Iterator) !Element {
         };
         self.pos = self.pos + 1;
         return elem;
-    } else if (self.state == State.inhead2) {
-        self.state = State.leavinghead2;
+    } else if (self.getState() == State.inhead2) {
+        self.setState(State.leavinghead2);
         const posstart = self.pos;
         skipEndOfLine(self);
         const elem = Element{
@@ -205,8 +230,8 @@ pub fn next(self: *Iterator) !Element {
         };
         self.pos = self.pos + 1;
         return elem;
-    } else if (self.state == State.inhead3) {
-        self.state = State.leavinghead3;
+    } else if (self.getState() == State.inhead3) {
+        self.setState(State.leavinghead3);
         const posstart = self.pos;
         skipEndOfLine(self);
         const elem = Element{
@@ -215,8 +240,8 @@ pub fn next(self: *Iterator) !Element {
         };
         self.pos = self.pos + 1;
         return elem;
-    } else if (self.state == State.inhead4) {
-        self.state = State.leavinghead4;
+    } else if (self.getState() == State.inhead4) {
+        self.setState(State.leavinghead4);
         const posstart = self.pos;
         skipEndOfLine(self);
         const elem = Element{
@@ -225,8 +250,8 @@ pub fn next(self: *Iterator) !Element {
         };
         self.pos = self.pos + 1;
         return elem;
-    } else if (self.state == State.inhead5) {
-        self.state = State.leavinghead5;
+    } else if (self.getState() == State.inhead5) {
+        self.setState(State.leavinghead5);
         const posstart = self.pos;
         skipEndOfLine(self);
         const elem = Element{
@@ -235,8 +260,8 @@ pub fn next(self: *Iterator) !Element {
         };
         self.pos = self.pos + 1;
         return elem;
-    } else if (self.state == State.inhead6) {
-        self.state = State.leavinghead6;
+    } else if (self.getState() == State.inhead6) {
+        self.setState(State.leavinghead6);
         const posstart = self.pos;
         skipEndOfLine(self);
         const elem = Element{
@@ -245,8 +270,8 @@ pub fn next(self: *Iterator) !Element {
         };
         self.pos = self.pos + 1;
         return elem;
-    } else if (self.state == State.inblockquote) {
-        self.state = State.leavingblockquote;
+    } else if (self.getState() == State.inblockquote) {
+        self.setState(State.leavingblockquote);
         const posstart = self.pos;
         skipEndOfLine(self);
         const elem = Element{
@@ -255,52 +280,52 @@ pub fn next(self: *Iterator) !Element {
         };
         self.pos = self.pos + 1;
         return elem;
-    } else if (self.state == State.leavingpara) {
-        self.state = State.indoc;
+    } else if (self.getState() == State.leavingpara) {
+        self.setState(State.indoc);
         return Element{
             .type = ElemType.endPara,
         };
-    } else if (self.state == State.leavinghead1) {
-        self.state = State.indoc;
+    } else if (self.getState() == State.leavinghead1) {
+        self.setState(State.indoc);
         return Element{
             .type = ElemType.endHead1,
         };
-    } else if (self.state == State.leavinghead2) {
-        self.state = State.indoc;
+    } else if (self.getState() == State.leavinghead2) {
+        self.setState(State.indoc);
         return Element{
             .type = ElemType.endHead2,
         };
-    } else if (self.state == State.leavinghead3) {
-        self.state = State.indoc;
+    } else if (self.getState() == State.leavinghead3) {
+        self.setState(State.indoc);
         return Element{
             .type = ElemType.endHead3,
         };
-    } else if (self.state == State.leavinghead4) {
-        self.state = State.indoc;
+    } else if (self.getState() == State.leavinghead4) {
+        self.setState(State.indoc);
         return Element{
             .type = ElemType.endHead4,
         };
-    } else if (self.state == State.leavinghead5) {
-        self.state = State.indoc;
+    } else if (self.getState() == State.leavinghead5) {
+        self.setState(State.indoc);
         return Element{
             .type = ElemType.endHead5,
         };
-    } else if (self.state == State.leavinghead6) {
-        self.state = State.indoc;
+    } else if (self.getState() == State.leavinghead6) {
+        self.setState(State.indoc);
         return Element{
             .type = ElemType.endHead6,
         };
-    } else if (self.state == State.leavingblockquote) {
-        self.state = State.indoc;
+    } else if (self.getState() == State.leavingblockquote) {
+        self.setState(State.indoc);
         return Element{
             .type = ElemType.endBlockquote,
         };
-    } else if (self.state == State.end) {
+    } else if (self.getState() == State.end) {
         return Element{
             .type = ElemType.endDocument,
         };
     } else {
-        std.debug.print("unexpected state: {any}\n", .{self.state});
+        std.debug.print("unexpected state: {d}\n", .{self.getState()});
         return CommandLineParserError.BadState;
     }
 }
