@@ -38,7 +38,10 @@ fn convert(it: *parser.Iterator) !void {
             parser.ElemType.endBlockquote => std.debug.print("</blockquote>\n", .{}),
             parser.ElemType.startPara => std.debug.print("<p>\n", .{}),
             parser.ElemType.endPara => std.debug.print("</p>\n", .{}),
+            parser.ElemType.startBold => std.debug.print("<strong>\n", .{}),
+            parser.ElemType.endBold => std.debug.print("</strong>\n", .{}),
             parser.ElemType.text => std.debug.print("{s}\n", .{elem.content.?}),
+            parser.ElemType.noop => {},
             else => std.debug.print("??? {any}\n", .{elem.type}),
         }
     }

@@ -15,6 +15,7 @@ const State = enum {
     inhead5,
     inhead6,
     inpara,
+    inbold,
     leavingpara,
     leavinghead1,
     leavinghead2,
@@ -24,6 +25,8 @@ const State = enum {
     leavinghead6,
     inblockquote,
     leavingblockquote,
+    leavingbold,
+    beforebold,
     end,
     undef,
 };
@@ -38,6 +41,7 @@ pub const ElemType = enum {
     startHead5,
     startHead6,
     startBlockquote,
+    startBold,
     endHead1,
     endHead2,
     endHead3,
@@ -47,7 +51,9 @@ pub const ElemType = enum {
     endBlockquote,
     startPara,
     endPara,
+    endBold,
     text,
+    noop,
     bad,
 };
 
@@ -120,15 +126,13 @@ pub fn next(self: *Iterator) !Element {
             .type = ElemType.startDocument,
         };
     } else if (self.getState() == State.indoc) {
+        skipNL(self);
+
         if (eod(self)) {
             self.setState(State.end);
             return Element{
                 .type = ElemType.endDocument,
             };
-        }
-
-        while (self.data[self.pos] == '\n' or self.data[self.pos] == '\n') {
-            skipNL(self);
         }
 
         if (self.data[self.pos] == '#') {
@@ -146,7 +150,7 @@ pub fn next(self: *Iterator) !Element {
                 };
             } else if (peek(self, "#####")) {
                 self.setState(State.inhead5);
-                skipBytes(self, 6);
+                skipBytes(self, 5);
                 skipSpaces(self);
                 return Element{
                     .type = ElemType.startHead5,
@@ -193,27 +197,43 @@ pub fn next(self: *Iterator) !Element {
                 .type = ElemType.startBlockquote,
             };
         } else {
-            std.debug.print("---> {s}\n", .{self.data[self.pos .. self.pos + 4]});
+            //std.debug.print("---> {s}\n", .{self.data[self.pos .. self.pos + 4]});
             self.setState(State.inpara);
             return Element{
                 .type = ElemType.startPara,
             };
         }
     } else if (self.getState() == State.inpara) {
-        self.setState(State.leavingpara);
         skipNL(self);
+
         const posstart = self.pos;
-        skipEndOfParagraph(self);
-        const elem = Element{
-            .type = ElemType.text,
-            .content = self.data[posstart..self.pos],
-        };
-        self.pos = self.pos + 1;
-        return elem;
+
+        while (true) {
+            if (parseParagraph(self)) {
+                self.setState(State.leavingpara);
+                if (!eod(self)) {
+                    self.pos = self.pos + 1;
+                }
+                break;
+            } else {
+                if (peek(self, "**")) {
+                    if (posstart == self.pos) {
+                        self.pos = self.pos + 2;
+                        self.pushState(State.inbold);
+                        return mkElement(ElemType.startBold);
+                    }
+                    break;
+                } else {
+                    self.pos = self.pos + 1;
+                }
+            }
+        }
+
+        return mkTextElement(self, posstart);
     } else if (self.getState() == State.inhead1) {
         self.setState(State.leavinghead1);
         const posstart = self.pos;
-        skipEndOfLine(self);
+        _ = skipEndOfLine(self);
         const elem = Element{
             .type = ElemType.text,
             .content = self.data[posstart..self.pos],
@@ -223,7 +243,7 @@ pub fn next(self: *Iterator) !Element {
     } else if (self.getState() == State.inhead2) {
         self.setState(State.leavinghead2);
         const posstart = self.pos;
-        skipEndOfLine(self);
+        _ = skipEndOfLine(self);
         const elem = Element{
             .type = ElemType.text,
             .content = self.data[posstart..self.pos],
@@ -233,7 +253,7 @@ pub fn next(self: *Iterator) !Element {
     } else if (self.getState() == State.inhead3) {
         self.setState(State.leavinghead3);
         const posstart = self.pos;
-        skipEndOfLine(self);
+        _ = skipEndOfLine(self);
         const elem = Element{
             .type = ElemType.text,
             .content = self.data[posstart..self.pos],
@@ -243,7 +263,7 @@ pub fn next(self: *Iterator) !Element {
     } else if (self.getState() == State.inhead4) {
         self.setState(State.leavinghead4);
         const posstart = self.pos;
-        skipEndOfLine(self);
+        _ = skipEndOfLine(self);
         const elem = Element{
             .type = ElemType.text,
             .content = self.data[posstart..self.pos],
@@ -253,7 +273,7 @@ pub fn next(self: *Iterator) !Element {
     } else if (self.getState() == State.inhead5) {
         self.setState(State.leavinghead5);
         const posstart = self.pos;
-        skipEndOfLine(self);
+        _ = skipEndOfLine(self);
         const elem = Element{
             .type = ElemType.text,
             .content = self.data[posstart..self.pos],
@@ -263,7 +283,7 @@ pub fn next(self: *Iterator) !Element {
     } else if (self.getState() == State.inhead6) {
         self.setState(State.leavinghead6);
         const posstart = self.pos;
-        skipEndOfLine(self);
+        _ = skipEndOfLine(self);
         const elem = Element{
             .type = ElemType.text,
             .content = self.data[posstart..self.pos],
@@ -273,12 +293,36 @@ pub fn next(self: *Iterator) !Element {
     } else if (self.getState() == State.inblockquote) {
         self.setState(State.leavingblockquote);
         const posstart = self.pos;
-        skipEndOfLine(self);
+        _ = skipEndOfLine(self);
         const elem = Element{
             .type = ElemType.text,
             .content = self.data[posstart..self.pos],
         };
         self.pos = self.pos + 1;
+        return elem;
+    } else if (self.getState() == State.inbold) {
+        const posstart = self.pos;
+
+        while (true) {
+            if (skipEndOfLine(self)) {
+                self.pos = self.pos + 1;
+                self.setState(State.leavingbold);
+                break;
+            } else {
+                if (peek(self, "**")) {
+                    const elem = mkTextElement(self, posstart);
+                    self.pos = self.pos + 2;
+                    self.setState(State.leavingbold);
+                    return elem;
+                }
+                self.pos = self.pos + 1;
+            }
+        }
+
+        const elem = Element{
+            .type = ElemType.text,
+            .content = self.data[posstart..self.pos],
+        };
         return elem;
     } else if (self.getState() == State.leavingpara) {
         self.setState(State.indoc);
@@ -320,14 +364,32 @@ pub fn next(self: *Iterator) !Element {
         return Element{
             .type = ElemType.endBlockquote,
         };
+    } else if (self.getState() == State.leavingbold) {
+        _ = try self.popState();
+        return Element{
+            .type = ElemType.endBold,
+        };
     } else if (self.getState() == State.end) {
         return Element{
             .type = ElemType.endDocument,
         };
     } else {
-        std.debug.print("unexpected state: {d}\n", .{self.getState()});
+        std.debug.print("unexpected state: {any}\n", .{self.getState()});
         return CommandLineParserError.BadState;
     }
+}
+
+fn mkElement(et: ElemType) Element {
+    return Element{
+        .type = et,
+    };
+}
+
+fn mkTextElement(self: *Iterator, start: usize) Element {
+    return Element{
+        .type = ElemType.text,
+        .content = self.data[start..self.pos],
+    };
 }
 
 fn eod(self: *Iterator) bool {
@@ -354,32 +416,60 @@ fn skipBytes(self: *Iterator, nbbytes: usize) void {
     }
 }
 
-fn skipEndOfParagraph(self: *Iterator) void {
+// parse a paragraph.
+// Returns true if the paragraph is completed, false otherwise.
+fn parseParagraph(self: *Iterator) bool {
     while (true) {
         if (eod(self)) {
-            return;
-        } else if (self.data[self.pos] == '\n') {
+            return true;
+        }
+
+        const ch = self.data[self.pos];
+
+        if (ch == '\n') {
             if (self.pos + 1 < self.data.len and (self.data[self.pos + 1] == '\r' or self.data[self.pos + 1] == '\n')) {
-                return;
+                return true;
             }
         }
+
+        if (self.pos < self.data.len - 1) {
+            const ch2 = self.data[self.pos + 1];
+            if (checkSpecialCharacter(ch2)) {
+                return false;
+            }
+        }
+
         self.pos = self.pos + 1;
     }
 }
 
-fn skipEndOfLine(self: *Iterator) void {
+fn skipEndOfLine(self: *Iterator) bool {
     while (true) {
         if (eod(self)) {
-            return;
-        } else if (self.data[self.pos] == '\n') {
-            return;
+            return true;
         }
+
+        if (self.data[self.pos] == '\n') {
+            return true;
+        }
+
+        if (self.pos < self.data.len - 1) {
+            const ch2 = self.data[self.pos + 1];
+            if (checkSpecialCharacter(ch2)) {
+                return false;
+            }
+        }
+
         self.pos = self.pos + 1;
     }
 }
 
 fn advance(self: *Iterator, nbbytes: usize) bool {
     self.pos = self.pos + nbbytes;
+}
+
+fn checkSpecialCharacter(ch: u8) bool {
+    return ch == '*';
 }
 
 fn peek(self: *Iterator, prefix: [:0]const u8) bool {
