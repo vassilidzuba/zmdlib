@@ -152,56 +152,40 @@ pub fn next(self: *Iterator) !Element {
         if (self.data[self.pos] == '#') {
             if (peek(self, "#######")) {
                 self.setState(State.inpara);
-                return Element{
-                    .type = ElemType.startPara,
-                };
+                return mkElement(ElemType.startPara);
             } else if (peek(self, "######")) {
                 self.setState(State.inhead6);
                 skipBytes(self, 6);
                 skipSpaces(self);
-                return Element{
-                    .type = ElemType.startHead6,
-                };
+                return mkElement(ElemType.startHead6);
             } else if (peek(self, "#####")) {
                 self.setState(State.inhead5);
                 skipBytes(self, 5);
                 skipSpaces(self);
-                return Element{
-                    .type = ElemType.startHead5,
-                };
+                return mkElement(ElemType.startHead5);
             } else if (peek(self, "####")) {
                 self.setState(State.inhead4);
                 skipBytes(self, 4);
                 skipSpaces(self);
-                return Element{
-                    .type = ElemType.startHead4,
-                };
+                return mkElement(ElemType.startHead4);
             } else if (peek(self, "###")) {
                 self.setState(State.inhead3);
                 skipBytes(self, 3);
                 skipSpaces(self);
-                return Element{
-                    .type = ElemType.startHead3,
-                };
+                return mkElement(ElemType.startHead3);
             } else if (peek(self, "##")) {
                 self.setState(State.inhead2);
                 skipBytes(self, 2);
                 skipSpaces(self);
-                return Element{
-                    .type = ElemType.startHead2,
-                };
+                return mkElement(ElemType.startHead2);
             } else if (peek(self, "#")) {
                 self.setState(State.inhead1);
                 skipBytes(self, 1);
                 skipSpaces(self);
-                return Element{
-                    .type = ElemType.startHead1,
-                };
+                return mkElement(ElemType.startHead1);
             } else {
                 self.setState(State.inpara);
-                return Element{
-                    .type = ElemType.startPara,
-                };
+                return mkElement(ElemType.startPara);
             }
         } else if (peek(self, "    ")) {
             self.setState(State.incodeblock);
@@ -210,15 +194,11 @@ pub fn next(self: *Iterator) !Element {
             self.setState(State.inblockquote);
             skipBytes(self, 1);
             skipSpaces(self);
-            return Element{
-                .type = ElemType.startBlockquote,
-            };
+            return mkElement(ElemType.startBlockquote);
         } else {
             //std.debug.print("---> {s}\n", .{self.data[self.pos .. self.pos + 4]});
             self.setState(State.inpara);
-            return Element{
-                .type = ElemType.startPara,
-            };
+            return mkElement(ElemType.startPara);
         }
     } else if (self.getState() == State.inpara) {
         skipNL(self);
@@ -272,70 +252,49 @@ pub fn next(self: *Iterator) !Element {
         self.setState(State.leavinghead1);
         const posstart = self.pos;
         _ = skipEndOfLine(self);
-        const elem = Element{
-            .type = ElemType.text,
-            .content = self.data[posstart..self.pos],
-        };
+        const elem = mkTextElement(self, posstart);
         self.pos = self.pos + 1;
         return elem;
     } else if (self.getState() == State.inhead2) {
         self.setState(State.leavinghead2);
         const posstart = self.pos;
         _ = skipEndOfLine(self);
-        const elem = Element{
-            .type = ElemType.text,
-            .content = self.data[posstart..self.pos],
-        };
+        const elem = mkTextElement(self, posstart);
         self.pos = self.pos + 1;
         return elem;
     } else if (self.getState() == State.inhead3) {
         self.setState(State.leavinghead3);
         const posstart = self.pos;
         _ = skipEndOfLine(self);
-        const elem = Element{
-            .type = ElemType.text,
-            .content = self.data[posstart..self.pos],
-        };
+        const elem = mkTextElement(self, posstart);
         self.pos = self.pos + 1;
         return elem;
     } else if (self.getState() == State.inhead4) {
         self.setState(State.leavinghead4);
         const posstart = self.pos;
         _ = skipEndOfLine(self);
-        const elem = Element{
-            .type = ElemType.text,
-            .content = self.data[posstart..self.pos],
-        };
+        const elem = mkTextElement(self, posstart);
         self.pos = self.pos + 1;
         return elem;
     } else if (self.getState() == State.inhead5) {
         self.setState(State.leavinghead5);
         const posstart = self.pos;
         _ = skipEndOfLine(self);
-        const elem = Element{
-            .type = ElemType.text,
-            .content = self.data[posstart..self.pos],
-        };
+        const elem = mkTextElement(self, posstart);
         self.pos = self.pos + 1;
         return elem;
     } else if (self.getState() == State.inhead6) {
         self.setState(State.leavinghead6);
         const posstart = self.pos;
         _ = skipEndOfLine(self);
-        const elem = Element{
-            .type = ElemType.text,
-            .content = self.data[posstart..self.pos],
-        };
+        const elem = mkTextElement(self, posstart);
         self.pos = self.pos + 1;
         return elem;
     } else if (self.getState() == State.inblockquote) {
         self.setState(State.leavingblockquote);
         const posstart = self.pos;
         _ = skipEndOfLine(self);
-        const elem = Element{
-            .type = ElemType.text,
-            .content = self.data[posstart..self.pos],
-        };
+        const elem = mkTextElement(self, posstart);
         self.pos = self.pos + 1;
         return elem;
     } else if (self.getState() == State.inbold) {
@@ -357,10 +316,7 @@ pub fn next(self: *Iterator) !Element {
             }
         }
 
-        const elem = Element{
-            .type = ElemType.text,
-            .content = self.data[posstart..self.pos],
-        };
+        const elem = mkTextElement(self, posstart);
         return elem;
     } else if (self.getState() == State.initalic) {
         const posstart = self.pos;
@@ -381,11 +337,7 @@ pub fn next(self: *Iterator) !Element {
             }
         }
 
-        const elem = Element{
-            .type = ElemType.text,
-            .content = self.data[posstart..self.pos],
-        };
-        return elem;
+        return mkTextElement(self, posstart);
     } else if (self.getState() == State.inbolditalic) {
         const posstart = self.pos;
 
@@ -405,11 +357,7 @@ pub fn next(self: *Iterator) !Element {
             }
         }
 
-        const elem = Element{
-            .type = ElemType.text,
-            .content = self.data[posstart..self.pos],
-        };
-        return elem;
+        return mkTextElement(self, posstart);
     } else if (self.getState() == State.incode) {
         const posstart = self.pos;
 
@@ -452,61 +400,39 @@ pub fn next(self: *Iterator) !Element {
         return mkElement(ElemType.endPara);
     } else if (self.getState() == State.leavinghead1) {
         self.setState(State.indoc);
-        return Element{
-            .type = ElemType.endHead1,
-        };
+        return mkElement(ElemType.endHead1);
     } else if (self.getState() == State.leavinghead2) {
         self.setState(State.indoc);
-        return Element{
-            .type = ElemType.endHead2,
-        };
+        return mkElement(ElemType.endHead2);
     } else if (self.getState() == State.leavinghead3) {
         self.setState(State.indoc);
-        return Element{
-            .type = ElemType.endHead3,
-        };
+        return mkElement(ElemType.endHead3);
     } else if (self.getState() == State.leavinghead4) {
         self.setState(State.indoc);
-        return Element{
-            .type = ElemType.endHead4,
-        };
+        return mkElement(ElemType.endHead4);
     } else if (self.getState() == State.leavinghead5) {
         self.setState(State.indoc);
-        return Element{
-            .type = ElemType.endHead5,
-        };
+        return mkElement(ElemType.endHead5);
     } else if (self.getState() == State.leavinghead6) {
         self.setState(State.indoc);
-        return Element{
-            .type = ElemType.endHead6,
-        };
+        return mkElement(ElemType.endHead6);
     } else if (self.getState() == State.leavingblockquote) {
         self.setState(State.indoc);
-        return Element{
-            .type = ElemType.endBlockquote,
-        };
+        return mkElement(ElemType.endBlockquote);
     } else if (self.getState() == State.leavingbold) {
         _ = try self.popState();
-        return Element{
-            .type = ElemType.endBold,
-        };
+        return mkElement(ElemType.endBold);
     } else if (self.getState() == State.leavingitalic) {
         _ = try self.popState();
-        return Element{
-            .type = ElemType.endItalic,
-        };
+        return mkElement(ElemType.endItalic);
     } else if (self.getState() == State.leavingbolditalic) {
         _ = try self.popState();
-        return Element{
-            .type = ElemType.endBoldItalic,
-        };
+        return mkElement(ElemType.endBoldItalic);
     } else if (self.getState() == State.leavingcode) {
         _ = try self.popState();
         return mkElement(ElemType.endCode);
     } else if (self.getState() == State.end) {
-        return Element{
-            .type = ElemType.endDocument,
-        };
+        return mkElement(ElemType.endDocument);
     } else {
         std.debug.print("unexpected state: {any}\n", .{self.getState()});
         return CommandLineParserError.BadState;
@@ -614,8 +540,8 @@ fn skipEndOfLineStrict(self: *Iterator) void {
 
 fn advance(self: *Iterator, nbbytes: usize) bool {
     if (self.pos + nbbytes <= self.data.len) {
-    self.pos = self.pos + nbbytes;
-    return true;
+        self.pos = self.pos + nbbytes;
+        return true;
     } else {
         self.pos = self.data.len;
         return false;
