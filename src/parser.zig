@@ -1,7 +1,7 @@
 // Copyright 2025, Vassili Dzuba
 // Distributed under the MIT license
 
-onst std = @import("std");
+const std = @import("std");
 
 const CommandLineParserError = error{
     BadState,
@@ -69,6 +69,7 @@ pub const ElemType = enum {
     endBoldItalic,
     endCode,
     endCodeBlock,
+    horizontalRule,
     text,
     noop,
     bad,
@@ -193,13 +194,20 @@ pub fn next(self: *Iterator) !Element {
         } else if (peek(self, "    ")) {
             self.setState(State.incodeblock);
             return mkElement(ElemType.startCodeBlock);
+        } else if (peek(self, "---") or peek(self, "***") or peek(self, "___")) {
+            if (checkIsRule(self)) {
+                skipEndOfLineStrict(self);
+                return mkElement(ElemType.horizontalRule);
+            } else {
+                self.setState(State.inpara);
+                return mkElement(ElemType.startPara);
+            }
         } else if (peek(self, ">")) {
             self.setState(State.inblockquote);
             skipBytes(self, 1);
             skipSpaces(self);
             return mkElement(ElemType.startBlockquote);
         } else {
-            //std.debug.print("---> {s}\n", .{self.data[self.pos .. self.pos + 4]});
             self.setState(State.inpara);
             return mkElement(ElemType.startPara);
         }
@@ -250,7 +258,14 @@ pub fn next(self: *Iterator) !Element {
             }
         }
 
-        return mkTextElement(self, posstart);
+        if (eod(self)) {
+            return mkTextElement(self, posstart);
+        } else {
+            self.pos = self.pos - 1;
+            const elem = mkTextElement(self, posstart);
+            self.pos = self.pos + 1;
+            return elem;
+        }
     } else if (self.getState() == State.inhead1) {
         self.setState(State.leavinghead1);
         const posstart = self.pos;
@@ -390,7 +405,7 @@ pub fn next(self: *Iterator) !Element {
             self.pos = self.pos + 4;
             const posstart = self.pos;
             skipEndOfLineStrict(self);
-            if (! eod(self)) {
+            if (!eod(self)) {
                 self.pos = self.pos + 1;
             }
             return mkTextElement(self, posstart);
@@ -553,6 +568,22 @@ fn advance(self: *Iterator, nbbytes: usize) bool {
 
 fn checkSpecialCharacter(ch: u8) bool {
     return ch == '*' or ch == '`';
+}
+
+fn checkIsRule(self: *Iterator) bool {
+    const ch = self.data[self.pos];
+    var pos: usize = self.pos + 3;
+    while (true) {
+        const ch2 = self.data[pos];
+        if (ch2 == ch) {
+            pos = pos + 1;
+            continue;
+        } else if (ch2 == '\r' or ch2 == '\n') {
+            return true;
+        } else {
+            return false;
+        }
+    }
 }
 
 fn peek(self: *Iterator, prefix: [:0]const u8) bool {

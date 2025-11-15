@@ -51,6 +51,7 @@ fn convert(it: *parser.Iterator) !void {
             parser.ElemType.endCode => std.debug.print("</code>", .{}),
             parser.ElemType.startCodeBlock => std.debug.print("<pre><code>", .{}),
             parser.ElemType.endCodeBlock => std.debug.print("</code></pre>\n", .{}),
+            parser.ElemType.horizontalRule => std.debug.print("<hr />\n", .{}),
             parser.ElemType.text => std.debug.print("{s}", .{elem.content.?}),
             parser.ElemType.noop => {},
             else => std.debug.print("??? {any}\n", .{elem.type}),
