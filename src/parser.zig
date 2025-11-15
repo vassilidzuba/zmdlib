@@ -16,6 +16,7 @@ const State = enum {
     inhead6,
     inpara,
     inbold,
+    initalic,
     leavingpara,
     leavinghead1,
     leavinghead2,
@@ -26,7 +27,7 @@ const State = enum {
     inblockquote,
     leavingblockquote,
     leavingbold,
-    beforebold,
+    leavingitalic,
     end,
     undef,
 };
@@ -42,6 +43,7 @@ pub const ElemType = enum {
     startHead6,
     startBlockquote,
     startBold,
+    startItalic,
     endHead1,
     endHead2,
     endHead3,
@@ -52,6 +54,7 @@ pub const ElemType = enum {
     startPara,
     endPara,
     endBold,
+    endItalic,
     text,
     noop,
     bad,
@@ -223,6 +226,13 @@ pub fn next(self: *Iterator) !Element {
                         return mkElement(ElemType.startBold);
                     }
                     break;
+                } else if (peek(self, "*")) {
+                    if (posstart == self.pos) {
+                        self.pos = self.pos + 1;
+                        self.pushState(State.initalic);
+                        return mkElement(ElemType.startItalic);
+                    }
+                    break;
                 } else {
                     self.pos = self.pos + 1;
                 }
@@ -324,6 +334,30 @@ pub fn next(self: *Iterator) !Element {
             .content = self.data[posstart..self.pos],
         };
         return elem;
+    } else if (self.getState() == State.initalic) {
+        const posstart = self.pos;
+
+        while (true) {
+            if (skipEndOfLine(self)) {
+                self.pos = self.pos + 1;
+                self.setState(State.leavingitalic);
+                break;
+            } else {
+                if (peek(self, "*")) {
+                    const elem = mkTextElement(self, posstart);
+                    self.pos = self.pos + 1;
+                    self.setState(State.leavingitalic);
+                    return elem;
+                }
+                self.pos = self.pos + 1;
+            }
+        }
+
+        const elem = Element{
+            .type = ElemType.text,
+            .content = self.data[posstart..self.pos],
+        };
+        return elem;
     } else if (self.getState() == State.leavingpara) {
         self.setState(State.indoc);
         return Element{
@@ -368,6 +402,11 @@ pub fn next(self: *Iterator) !Element {
         _ = try self.popState();
         return Element{
             .type = ElemType.endBold,
+        };
+    } else if (self.getState() == State.leavingitalic) {
+        _ = try self.popState();
+        return Element{
+            .type = ElemType.endItalic,
         };
     } else if (self.getState() == State.end) {
         return Element{
@@ -433,7 +472,7 @@ fn parseParagraph(self: *Iterator) bool {
         }
 
         if (self.pos < self.data.len - 1) {
-            const ch2 = self.data[self.pos + 1];
+            const ch2 = self.data[self.pos];
             if (checkSpecialCharacter(ch2)) {
                 return false;
             }
