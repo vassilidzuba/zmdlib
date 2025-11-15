@@ -18,6 +18,8 @@ const State = enum {
     inbold,
     initalic,
     inbolditalic,
+    incode,
+    incodeblock,
     leavingpara,
     leavinghead1,
     leavinghead2,
@@ -30,6 +32,7 @@ const State = enum {
     leavingbold,
     leavingitalic,
     leavingbolditalic,
+    leavingcode,
     end,
     undef,
 };
@@ -47,6 +50,8 @@ pub const ElemType = enum {
     startBold,
     startItalic,
     startBoldItalic,
+    startCode,
+    startCodeBlock,
     startPara,
     endHead1,
     endHead2,
@@ -59,6 +64,8 @@ pub const ElemType = enum {
     endBold,
     endItalic,
     endBoldItalic,
+    endCode,
+    endCodeBlock,
     text,
     noop,
     bad,
@@ -196,6 +203,9 @@ pub fn next(self: *Iterator) !Element {
                     .type = ElemType.startPara,
                 };
             }
+        } else if (peek(self, "    ")) {
+            self.setState(State.incodeblock);
+            return mkElement(ElemType.startCodeBlock);
         } else if (peek(self, ">")) {
             self.setState(State.inblockquote);
             skipBytes(self, 1);
@@ -242,6 +252,13 @@ pub fn next(self: *Iterator) !Element {
                         self.pos = self.pos + 1;
                         self.pushState(State.initalic);
                         return mkElement(ElemType.startItalic);
+                    }
+                    break;
+                } else if (peek(self, "`")) {
+                    if (posstart == self.pos) {
+                        self.pos = self.pos + 1;
+                        self.pushState(State.incode);
+                        return mkElement(ElemType.startCode);
                     }
                     break;
                 } else {
@@ -393,11 +410,46 @@ pub fn next(self: *Iterator) !Element {
             .content = self.data[posstart..self.pos],
         };
         return elem;
+    } else if (self.getState() == State.incode) {
+        const posstart = self.pos;
+
+        while (true) {
+            if (skipEndOfLine(self)) {
+                self.pos = self.pos + 1;
+                self.setState(State.leavingcode);
+                break;
+            } else {
+                //std.debug.print(">>> {s}", .{self.data[self.pos .. self.pos + 2]});
+                if (peek(self, "`")) {
+                    const elem = mkTextElement(self, posstart);
+                    self.pos = self.pos + 1;
+                    self.setState(State.leavingcode);
+                    return elem;
+                }
+                self.pos = self.pos + 1;
+            }
+        }
+
+        return mkTextElement(self, posstart);
+    } else if (self.getState() == State.incodeblock) {
+        if (eod(self)) {
+            self.setState(State.indoc);
+            return mkElement(ElemType.endCodeBlock);
+        } else if (peek(self, "    ")) {
+            self.pos = self.pos + 4;
+            const posstart = self.pos;
+            skipEndOfLineStrict(self);
+            if (! eod(self)) {
+                self.pos = self.pos + 1;
+            }
+            return mkTextElement(self, posstart);
+        } else {
+            self.setState(State.indoc);
+            return mkElement(ElemType.endCodeBlock);
+        }
     } else if (self.getState() == State.leavingpara) {
         self.setState(State.indoc);
-        return Element{
-            .type = ElemType.endPara,
-        };
+        return mkElement(ElemType.endPara);
     } else if (self.getState() == State.leavinghead1) {
         self.setState(State.indoc);
         return Element{
@@ -448,6 +500,9 @@ pub fn next(self: *Iterator) !Element {
         return Element{
             .type = ElemType.endBoldItalic,
         };
+    } else if (self.getState() == State.leavingcode) {
+        _ = try self.popState();
+        return mkElement(ElemType.endCode);
     } else if (self.getState() == State.end) {
         return Element{
             .type = ElemType.endDocument,
@@ -533,7 +588,7 @@ fn skipEndOfLine(self: *Iterator) bool {
         }
 
         if (self.pos < self.data.len - 1) {
-            const ch2 = self.data[self.pos + 1];
+            const ch2 = self.data[self.pos];
             if (checkSpecialCharacter(ch2)) {
                 return false;
             }
@@ -543,12 +598,32 @@ fn skipEndOfLine(self: *Iterator) bool {
     }
 }
 
+fn skipEndOfLineStrict(self: *Iterator) void {
+    while (true) {
+        if (eod(self)) {
+            return;
+        }
+
+        if (self.data[self.pos] == '\n') {
+            return;
+        }
+
+        self.pos = self.pos + 1;
+    }
+}
+
 fn advance(self: *Iterator, nbbytes: usize) bool {
+    if (self.pos + nbbytes <= self.data.len) {
     self.pos = self.pos + nbbytes;
+    return true;
+    } else {
+        self.pos = self.data.len;
+        return false;
+    }
 }
 
 fn checkSpecialCharacter(ch: u8) bool {
-    return ch == '*';
+    return ch == '*' or ch == '`';
 }
 
 fn peek(self: *Iterator, prefix: [:0]const u8) bool {
