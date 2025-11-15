@@ -1,4 +1,7 @@
-const std = @import("std");
+// Copyright 2025, Vassili Dzuba
+// Distributed under the MIT license
+
+onst std = @import("std");
 
 const CommandLineParserError = error{
     BadState,

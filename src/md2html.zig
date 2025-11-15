@@ -1,3 +1,6 @@
+// Copyright 2025, Vassili Dzuba
+// Distributed under the MIT license
+
 const std = @import("std");
 const parser = @import("./parser.zig");
 

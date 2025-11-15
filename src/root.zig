@@ -1,4 +1,6 @@
-//! By convention, root.zig is the root source file when making a library.
+// Copyright 2025, Vassili Dzuba
+// Distributed under the MIT license
+
 const std = @import("std");
 const parser = @import("./parser.zig");
 const md2html = @import("./md2html.zig");
