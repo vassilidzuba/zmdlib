@@ -51,7 +51,6 @@ At the moment, the following markdown tags are supported:
 - ordinary paragraphs
 - headings (level 1 to 6)
 - blockquotes (partial implementation)
-- bold
-- italic
+- emphasis (bold, italic, bold+italic)
 
 warning: UTF-8 is not supported (yet).
