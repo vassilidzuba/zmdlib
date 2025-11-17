@@ -53,5 +53,11 @@ At the moment, the following markdown tags are supported:
 - blockquotes (partial implementation)
 - emphasis (bold, italic, bold+italic)
 - code and code block (using four spaces)
+- horizontal rule
+- linebrak (as trailing spaces)
 
 warning: UTF-8 is not supported (yet).
+
+# the program tohtml
+
+This program converts a markdown file into an html file.

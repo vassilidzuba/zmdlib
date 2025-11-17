@@ -71,6 +71,7 @@ pub const ElemType = enum {
     endCodeBlock,
     horizontalRule,
     text,
+    lineBreak,
     noop,
     bad,
 };
@@ -81,7 +82,7 @@ pub const Element = struct {
 };
 
 pub const Iterator = struct {
-    allocator: ?std.mem.Allocator = null,
+    allocator: ?*const std.mem.Allocator = null,
     tobefreed: ?[]u8 = null,
     data: []const u8,
     pos: usize = 0,
@@ -122,7 +123,7 @@ pub fn parse(text: []const u8) !Iterator {
     return Iterator{ .data = text };
 }
 
-pub fn parseFile(allocator: std.mem.Allocator, path: [:0]const u8) !Iterator {
+pub fn parseFile(allocator: *const std.mem.Allocator, path: [:0]const u8) !Iterator {
     const file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
@@ -252,13 +253,19 @@ pub fn next(self: *Iterator) !Element {
                         return mkElement(ElemType.startCode);
                     }
                     break;
+                } else if (trailingWhiteSpace(self, false)) {
+                    if (posstart == self.pos) {
+                        _ = trailingWhiteSpace(self, true);
+                        return mkElement(ElemType.lineBreak);
+                    }
+                    break;
                 } else {
                     self.pos = self.pos + 1;
                 }
             }
         }
 
-        if (eod(self)) {
+        if (eod(self) or !peek(self, "\n")) {
             return mkTextElement(self, posstart);
         } else {
             self.pos = self.pos - 1;
@@ -510,15 +517,39 @@ fn parseParagraph(self: *Iterator) bool {
             }
         }
 
-        if (self.pos < self.data.len - 1) {
-            const ch2 = self.data[self.pos];
-            if (checkSpecialCharacter(ch2)) {
-                return false;
-            }
+        if (checkSpecialCharacter(ch)) {
+            return false;
+        }
+
+        if (trailingWhiteSpace(self, false)) {
+            return false;
         }
 
         self.pos = self.pos + 1;
     }
+}
+
+fn trailingWhiteSpace(self: *Iterator, skip: bool) bool {
+    var pos = self.pos;
+    var nbspaces: usize = 0;
+    var nbcr: usize = 0;
+    while (pos < self.data.len and (self.data[pos] == ' ' or self.data[pos] == '\r' or self.data[pos] == '\n')) {
+        if (self.data[pos] == '\n') {
+            nbcr = nbcr + 1;
+        }
+        if (self.data[pos] == ' ') {
+            nbspaces = nbspaces + 1;
+        }
+        pos = pos + 1;
+    }
+
+    const trailing = nbspaces >= 2 and pos < self.data.len and self.data[pos - 1] == '\n' and nbcr == 1;
+
+    if (trailing and skip) {
+        self.pos = pos;
+    }
+
+    return trailing;
 }
 
 fn skipEndOfLine(self: *Iterator) bool {
@@ -635,6 +666,26 @@ test "two" {
         });
         if (elem.content) |content| {
             std.debug.print(": \n{s}\n", .{content});
+        }
+
+        std.debug.print("\n", .{});
+
+        if (elem.type == ElemType.endDocument) {
+            break;
+        }
+    }
+}
+
+test "linebreak" {
+    var it = try parse("lorem ipsum   \net caetera.");
+    while (true) {
+        const elem = try next(&it);
+
+        std.debug.print("type of element is {any}", .{
+            elem.type,
+        });
+        if (elem.content) |content| {
+            std.debug.print(": {s}", .{content});
         }
 
         std.debug.print("\n", .{});

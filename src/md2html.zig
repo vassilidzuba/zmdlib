@@ -4,58 +4,64 @@
 const std = @import("std");
 const parser = @import("./parser.zig");
 
-pub fn md2htmlFile(allocator: std.mem.Allocator, path: [:0]const u8) !void {
+pub fn md2htmlFile(allocator: *const std.mem.Allocator, path: [:0]const u8, output: ?std.fs.File) !void {
     var it = try parser.parseFile(allocator, path);
     defer it.deinit();
-    try convert(&it);
+
+    if (output) |out| {
+        try convert(&it, out);
+    } else {
+        try convert(&it, std.fs.File.stdout());
+    }
 }
 
 pub fn md2html(text: []const u8) !void {
     var it = try parser.parse(text);
-    try convert(&it);
+    try convert(&it, std.fs.File.stdout());
 }
 
-fn convert(it: *parser.Iterator) !void {
+fn convert(it: *parser.Iterator, out: std.fs.File) !void {
     while (true) {
         const elem = try parser.next(it);
 
-        switch (elem.type) {
-            parser.ElemType.startDocument => std.debug.print("<html><doc>\n", .{}),
+        _ = switch (elem.type) {
+            parser.ElemType.startDocument => try out.write("<html><doc>\n"),
             parser.ElemType.endDocument => {
-                std.debug.print("</doc></html>\n", .{});
+                _ = try out.write("</doc></html>\n");
                 break;
             },
-            parser.ElemType.startHead1 => std.debug.print("<h1>", .{}),
-            parser.ElemType.endHead1 => std.debug.print("</h1>\n", .{}),
-            parser.ElemType.startHead2 => std.debug.print("<h2>", .{}),
-            parser.ElemType.endHead2 => std.debug.print("</h2>\n", .{}),
-            parser.ElemType.startHead3 => std.debug.print("<h3>", .{}),
-            parser.ElemType.endHead3 => std.debug.print("</h3>\n", .{}),
-            parser.ElemType.startHead4 => std.debug.print("<h4>", .{}),
-            parser.ElemType.endHead4 => std.debug.print("</h4>\n", .{}),
-            parser.ElemType.startHead5 => std.debug.print("<h5>", .{}),
-            parser.ElemType.endHead5 => std.debug.print("</h5>\n", .{}),
-            parser.ElemType.startHead6 => std.debug.print("<h6>", .{}),
-            parser.ElemType.endHead6 => std.debug.print("</h6>\n", .{}),
-            parser.ElemType.startBlockquote => std.debug.print("<blockquote>\n", .{}),
-            parser.ElemType.endBlockquote => std.debug.print("</blockquote>\n", .{}),
-            parser.ElemType.startPara => std.debug.print("<p>", .{}),
-            parser.ElemType.endPara => std.debug.print("</p>\n", .{}),
-            parser.ElemType.startBold => std.debug.print("<strong>", .{}),
-            parser.ElemType.endBold => std.debug.print("</strong>", .{}),
-            parser.ElemType.startItalic => std.debug.print("<em>", .{}),
-            parser.ElemType.endItalic => std.debug.print("</em>", .{}),
-            parser.ElemType.startBoldItalic => std.debug.print("<em><strong>", .{}),
-            parser.ElemType.endBoldItalic => std.debug.print("</strong></em>", .{}),
-            parser.ElemType.startCode => std.debug.print("<code>", .{}),
-            parser.ElemType.endCode => std.debug.print("</code>", .{}),
-            parser.ElemType.startCodeBlock => std.debug.print("<pre><code>", .{}),
-            parser.ElemType.endCodeBlock => std.debug.print("</code></pre>\n", .{}),
-            parser.ElemType.horizontalRule => std.debug.print("<hr />\n", .{}),
-            parser.ElemType.text => std.debug.print("{s}", .{elem.content.?}),
+            parser.ElemType.startHead1 => try out.write("<h1>"),
+            parser.ElemType.endHead1 => try out.write("</h1>\n"),
+            parser.ElemType.startHead2 => try out.write("<h2>"),
+            parser.ElemType.endHead2 => try out.write("</h2>\n"),
+            parser.ElemType.startHead3 => try out.write("<h3>"),
+            parser.ElemType.endHead3 => try out.write("</h3>\n"),
+            parser.ElemType.startHead4 => try out.write("<h4>"),
+            parser.ElemType.endHead4 => try out.write("</h4>\n"),
+            parser.ElemType.startHead5 => try out.write("<h5>"),
+            parser.ElemType.endHead5 => try out.write("</h5>\n"),
+            parser.ElemType.startHead6 => try out.write("<h6>"),
+            parser.ElemType.endHead6 => try out.write("</h6>\n"),
+            parser.ElemType.startBlockquote => try out.write("<blockquote>\n"),
+            parser.ElemType.endBlockquote => try out.write("</blockquote>\n"),
+            parser.ElemType.startPara => try out.write("<p>"),
+            parser.ElemType.endPara => try out.write("</p>\n"),
+            parser.ElemType.startBold => try out.write("<strong>"),
+            parser.ElemType.endBold => try out.write("</strong>"),
+            parser.ElemType.startItalic => try out.write("<em>"),
+            parser.ElemType.endItalic => try out.write("</em>"),
+            parser.ElemType.startBoldItalic => try out.write("<em><strong>"),
+            parser.ElemType.endBoldItalic => try out.write("</strong></em>"),
+            parser.ElemType.startCode => try out.write("<code>"),
+            parser.ElemType.endCode => try out.write("</code>"),
+            parser.ElemType.startCodeBlock => try out.write("<pre><code>"),
+            parser.ElemType.endCodeBlock => try out.write("</code></pre>\n"),
+            parser.ElemType.horizontalRule => try out.write("<hr />\n"),
+            parser.ElemType.lineBreak => try out.write("<br />\n"),
+            parser.ElemType.text => try out.write(elem.content.?),
             parser.ElemType.noop => {},
             else => std.debug.print("??? {any}\n", .{elem.type}),
-        }
+        };
     }
 }
 

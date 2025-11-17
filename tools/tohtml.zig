@@ -2,15 +2,17 @@ const std = @import("std");
 const zmdlib = @import("zmdlib");
 const cli = @import("cli");
 
+var config = struct {
+    help: ?bool = false,
+    output: ?[:0]const u8 = null,
+    operands: std.ArrayList([:0]u8) = .empty,
+}{};
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     defer _ = gpa.deinit();
 
-    var config = struct {
-        help: ?bool = false,
-        operands: std.ArrayList([:0]u8) = .empty,
-    }{};
     defer {
         for (config.operands.items) |val| {
             allocator.free(val);
@@ -22,7 +24,9 @@ pub fn main() !void {
         .desc = "convert markdown to html",
         .options = &.{
             .{ .help = "display this help", .short_name = 'h', .long_name = "help", .ref = cli.ValueRef{ .boolean = &config.help } },
+            .{ .help = "output file", .short_name = 'o', .long_name = "output", .ref = cli.ValueRef{ .string = &config.output } },
         },
+        .exec = runit,
         .operands = &config.operands,
     };
 
@@ -34,9 +38,23 @@ pub fn main() !void {
             return;
         }
     }
+}
 
+fn runit(allocator: *const std.mem.Allocator) !void {
     for (config.operands.items) |path| {
-        std.debug.print("Converting {s} !\n\n\n", .{path});
-        try zmdlib.md2htmlFile(allocator, path);
+        if (config.output) |output| {
+            std.debug.print("Converting {s} !\n", .{path});
+            std.debug.print("output file is {s} !\n\n\n", .{output});
+            const file = try std.fs.cwd().createFile(
+                output,
+                .{ .read = true },
+            );
+            defer file.close();
+
+            try zmdlib.md2htmlFile(allocator, path, file);
+        } else {
+            std.debug.print("Converting {s} !\n\n\n", .{path});
+            try zmdlib.md2htmlFile(allocator, path, null);
+        }
     }
 }
