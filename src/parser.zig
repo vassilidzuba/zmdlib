@@ -23,6 +23,10 @@ const State = enum {
     inbolditalic,
     incode,
     incodeblock,
+    inlink,
+    inlinktitle,
+    inlinkurl,
+    inshortlink,
     leavingpara,
     leavinghead1,
     leavinghead2,
@@ -36,6 +40,10 @@ const State = enum {
     leavingitalic,
     leavingbolditalic,
     leavingcode,
+    leavinglink,
+    leavinglinktitle,
+    leavinglinkurl,
+    leavingshortlink,
     end,
     undef,
 };
@@ -56,6 +64,10 @@ pub const ElemType = enum {
     startCode,
     startCodeBlock,
     startPara,
+    startLink,
+    startLinkTitle,
+    startLinkUrl,
+    startShortLink,
     endHead1,
     endHead2,
     endHead3,
@@ -69,6 +81,10 @@ pub const ElemType = enum {
     endBoldItalic,
     endCode,
     endCodeBlock,
+    endLink,
+    endLinkTitle,
+    endLinkUrl,
+    endShortLink,
     horizontalRule,
     text,
     lineBreak,
@@ -251,6 +267,18 @@ pub fn next(self: *Iterator) !Element {
                         self.pos = self.pos + 1;
                         self.pushState(State.incode);
                         return mkElement(ElemType.startCode);
+                    }
+                    break;
+                } else if (checkLink(self)) {
+                    if (posstart == self.pos) {
+                        self.pushState(State.inlink);
+                        return mkElement(ElemType.startLink);
+                    }
+                    break;
+                } else if (checkShortLink(self)) {
+                    if (posstart == self.pos) {
+                        self.pushState(State.inshortlink);
+                        return mkElement(ElemType.startShortLink);
                     }
                     break;
                 } else if (trailingWhiteSpace(self, false)) {
@@ -456,6 +484,54 @@ pub fn next(self: *Iterator) !Element {
     } else if (self.getState() == State.leavingcode) {
         _ = try self.popState();
         return mkElement(ElemType.endCode);
+    } else if (self.getState() == State.inlink) {
+        self.setState(State.inlinktitle);
+        return mkElement(ElemType.startLinkTitle);
+    } else if (self.getState() == State.inlinktitle) {
+        if (self.data[self.pos] == ']') {
+            self.setState(State.leavinglinktitle);
+            return mkElement(ElemType.endLinkTitle);
+        } else {
+            self.pos = self.pos + 1;
+            const posstart = self.pos;
+            while (self.data[self.pos] != ']') {
+                self.pos = self.pos + 1;
+            }
+            return mkTextElement(self, posstart);
+        }
+    } else if (self.getState() == State.leavinglinktitle) {
+        self.pos = self.pos + 1;
+        self.setState(State.inlinkurl);
+        return mkElement(ElemType.startLinkUrl);
+    } else if (self.getState() == State.inlinkurl) {
+        if (self.data[self.pos] == ')') {
+            self.setState(State.leavinglink);
+            return mkElement(ElemType.endLinkUrl);
+        } else {
+            self.pos = self.pos + 1;
+            const posstart = self.pos;
+            while (self.data[self.pos] != ')') {
+                self.pos = self.pos + 1;
+            }
+            return mkTextElement(self, posstart);
+        }
+    } else if (self.getState() == State.leavinglink) {
+        self.pos = self.pos + 1;
+        _ = try self.popState();
+        return mkElement(ElemType.endLink);
+    } else if (self.getState() == State.inshortlink) {
+        if (self.data[self.pos] == '>') {
+            _ = try self.popState();
+            self.pos = self.pos + 1;
+            return mkElement(ElemType.endShortLink);
+        } else {
+            self.pos = self.pos + 1;
+            const posstart = self.pos;
+            while (self.data[self.pos] != '>') {
+                self.pos = self.pos + 1;
+            }
+            return mkTextElement(self, posstart);
+        }
     } else if (self.getState() == State.end) {
         return mkElement(ElemType.endDocument);
     } else {
@@ -474,6 +550,12 @@ fn mkTextElement(self: *Iterator, start: usize) Element {
     return Element{
         .type = ElemType.text,
         .content = self.data[start..self.pos],
+    };
+}
+
+fn mkLinkElement(_: *Iterator) Element {
+    return Element{
+        .type = ElemType.link,
     };
 }
 
@@ -552,6 +634,62 @@ fn trailingWhiteSpace(self: *Iterator, skip: bool) bool {
     return trailing;
 }
 
+fn checkLink(self: *Iterator) bool {
+    var pos = self.pos;
+    var foundClosingBracket = false;
+    var foundClosingParenthese = false;
+    if (pos < self.data.len and self.data[pos] == '[') {
+        pos = pos + 1;
+        while (pos < self.data.len and self.data[pos] != '\n' and self.data[pos] != ']') {
+            pos = pos + 1;
+        }
+        if (pos < self.data.len and self.data[pos] == ']') {
+            pos = pos + 1;
+            foundClosingBracket = true;
+            if (pos < self.data.len and self.data[pos] == '(') {
+                pos = pos + 1;
+                while (pos < self.data.len and self.data[pos] != '\n' and self.data[pos] != ')') {
+                    pos = pos + 1;
+                }
+                while (pos < self.data.len and self.data[pos] != '\n' and self.data[pos] != ')') {
+                    pos = pos + 1;
+                }
+                if (pos < self.data.len and self.data[pos] == ')') {
+                    foundClosingParenthese = true;
+                }
+            }
+        }
+    }
+
+    return foundClosingBracket and foundClosingParenthese;
+}
+
+fn checkShortLink(self: *Iterator) bool {
+    var isurl = false;
+    var ismail = false;
+    var pos = self.pos;
+    if (pos < self.data.len and self.data[pos] == '<') {
+        pos = pos + 1;
+
+        while (pos < self.data.len and self.data[pos] != '\n' and self.data[pos] != ' ' and self.data[pos] != '>') {
+            if (peekAt(self, "://", pos)) {
+                isurl = true;
+            }
+            if (pos < self.data.len and self.data[pos] == '@') {
+                ismail = true;
+            }
+
+            pos = pos + 1;
+        }
+    }
+
+    //std.debug.print("isurl : {any}\n", .{isurl});
+    //std.debug.print("ismail : {any}\n", .{ismail});
+    //std.debug.print("data : {c}\n", .{self.data[pos]});
+
+    return (isurl or ismail) and pos < self.data.len and self.data[pos] == '>';
+}
+
 fn skipEndOfLine(self: *Iterator) bool {
     while (true) {
         if (eod(self)) {
@@ -598,7 +736,7 @@ fn advance(self: *Iterator, nbbytes: usize) bool {
 }
 
 fn checkSpecialCharacter(ch: u8) bool {
-    return ch == '*' or ch == '`';
+    return ch == '*' or ch == '`' or ch == '[' or ch == '<';
 }
 
 fn checkIsRule(self: *Iterator) bool {
@@ -618,10 +756,14 @@ fn checkIsRule(self: *Iterator) bool {
 }
 
 fn peek(self: *Iterator, prefix: [:0]const u8) bool {
-    if (self.pos + prefix.len >= self.data.len) {
+    return peekAt(self, prefix, self.pos);
+}
+
+fn peekAt(self: *Iterator, prefix: [:0]const u8, startpos: usize) bool {
+    var pos = startpos;
+    if (pos + prefix.len >= self.data.len) {
         return false;
     }
-    var pos = self.pos;
     for (prefix) |ch| {
         if (self.data[pos] != ch) {
             return false;
@@ -680,6 +822,64 @@ test "linebreak" {
     var it = try parse("lorem ipsum   \net caetera.");
     while (true) {
         const elem = try next(&it);
+
+        std.debug.print("type of element is {any}", .{
+            elem.type,
+        });
+        if (elem.content) |content| {
+            std.debug.print(": {s}", .{content});
+        }
+
+        std.debug.print("\n", .{});
+
+        if (elem.type == ElemType.endDocument) {
+            break;
+        }
+    }
+}
+
+test "checklink" {
+    var it = try parse("This is [my link](http://link) ! \n");
+    while (true) {
+        const elem = try next(&it);
+
+        std.debug.print("type of element is {any}", .{
+            elem.type,
+        });
+        if (elem.content) |content| {
+            std.debug.print(": {s}", .{content});
+        }
+
+        std.debug.print("\n", .{});
+
+        if (elem.type == ElemType.endDocument) {
+            break;
+        }
+    }
+}
+
+test "checkshortlink" {
+    var it = Iterator{ .data = "<http://goo>" };
+    const ok = checkShortLink(&it);
+    std.debug.print("is ok ? {any}\n", .{ok});
+    try std.testing.expect(ok);
+
+    try showEvents(&it);
+}
+
+test "checkshortlink2" {
+    var it = Iterator{ .data = "<godybook@example.com>" };
+    const ok = checkShortLink(&it);
+    std.debug.print("is ok ? {any}\n", .{ok});
+    try std.testing.expect(ok);
+
+    try showEvents(&it);
+}
+
+fn showEvents(it: *Iterator) !void {
+    it.pos = 0;
+    while (true) {
+        const elem = try next(it);
 
         std.debug.print("type of element is {any}", .{
             elem.type,

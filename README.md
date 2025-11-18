@@ -54,10 +54,14 @@ At the moment, the following markdown tags are supported:
 - emphasis (bold, italic, bold+italic)
 - code and code block (using four spaces)
 - horizontal rule
-- linebrak (as trailing spaces)
+- linebreak (as trailing spaces)
+- links and URLs/email addresses
 
 warning: UTF-8 is not supported (yet).
 
 # the program tohtml
 
 This program converts a markdown file into an html file.
+Use is :
+
+    tohtml [--output OUTPUTFILE] INPUTFILE

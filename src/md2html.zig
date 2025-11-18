@@ -21,6 +21,12 @@ pub fn md2html(text: []const u8) !void {
 }
 
 fn convert(it: *parser.Iterator, out: std.fs.File) !void {
+    var inlinktitle = false;
+    var inlinkurl = false;
+    var inshortlink = false;
+    var linktitle: ?[]const u8 = null;
+    var linkurl: ?[]const u8 = null;
+
     while (true) {
         const elem = try parser.next(it);
 
@@ -58,11 +64,61 @@ fn convert(it: *parser.Iterator, out: std.fs.File) !void {
             parser.ElemType.endCodeBlock => try out.write("</code></pre>\n"),
             parser.ElemType.horizontalRule => try out.write("<hr />\n"),
             parser.ElemType.lineBreak => try out.write("<br />\n"),
-            parser.ElemType.text => try out.write(elem.content.?),
+            parser.ElemType.text => {
+                if (inlinktitle) {
+                    linktitle = elem.content.?;
+                } else if (inlinkurl) {
+                    linkurl = elem.content.?;
+                } else if (inshortlink) {
+                    try writeShortLink(elem.content.?, out);
+                } else {
+                    _ = try out.write(elem.content.?);
+                }
+            },
+            parser.ElemType.startLink => {},
+            parser.ElemType.startLinkTitle => inlinktitle = true,
+            parser.ElemType.endLinkTitle => inlinktitle = false,
+            parser.ElemType.startLinkUrl => inlinkurl = true,
+            parser.ElemType.endLinkUrl => inlinkurl = false,
+            parser.ElemType.endLink => {
+                _ = try out.write("<a href=\"");
+                _ = try out.write(linkurl.?);
+                _ = try out.write("\">");
+                _ = try out.write(linktitle.?);
+                _ = try out.write("</a>");
+            },
+            parser.ElemType.startShortLink => inshortlink = true,
+            parser.ElemType.endShortLink => inshortlink = false,
             parser.ElemType.noop => {},
             else => std.debug.print("??? {any}\n", .{elem.type}),
         };
     }
+}
+
+fn writeShortLink(data: []const u8, out: std.fs.File) !void {
+    if (isMailAddress(data)) {
+        _ = try out.write("<a href=\"mailto:");
+        _ = try out.write(data);
+        _ = try out.write("\" class=\"email\">");
+        _ = try out.write(data);
+        _ = try out.write("</a>");
+    } else {
+        _ = try out.write("<a href=\"");
+        _ = try out.write(data);
+        _ = try out.write("\" class=\"uri\">");
+        _ = try out.write(data);
+        _ = try out.write("</a>");
+    }
+}
+
+fn isMailAddress(data: []const u8) bool {
+    // test should be more precise
+    for (data) |c| {
+        if (c == '@') {
+            return true;
+        }
+    }
+    return false;
 }
 
 test "one" {
