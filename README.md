@@ -71,6 +71,5 @@ Use is :
 
 - add titles to links
 - support emphasis over several lines
-- protect `<` and `&`
 - normalize spaces
 - embedded lists

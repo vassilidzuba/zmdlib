@@ -72,7 +72,7 @@ fn convert(it: *parser.Iterator, out: std.fs.File) !void {
                 } else if (inshortlink) {
                     try writeShortLink(elem.content.?, out);
                 } else {
-                    _ = try out.write(elem.content.?);
+                    _ = try writeProtectedText(elem.content.?, out);
                 }
             },
             parser.ElemType.startLink => {},
@@ -82,9 +82,9 @@ fn convert(it: *parser.Iterator, out: std.fs.File) !void {
             parser.ElemType.endLinkUrl => inlinkurl = false,
             parser.ElemType.endLink => {
                 _ = try out.write("<a href=\"");
-                _ = try out.write(linkurl.?);
+                _ = try writeProtectedText(linkurl.?, out);
                 _ = try out.write("\">");
-                _ = try out.write(linktitle.?);
+                _ = try writeProtectedText(linktitle.?, out);
                 _ = try out.write("</a>");
             },
             parser.ElemType.startShortLink => inshortlink = true,
@@ -102,16 +102,40 @@ fn convert(it: *parser.Iterator, out: std.fs.File) !void {
 fn writeShortLink(data: []const u8, out: std.fs.File) !void {
     if (isMailAddress(data)) {
         _ = try out.write("<a href=\"mailto:");
-        _ = try out.write(data);
+        _ = try writeProtectedText(data, out);
         _ = try out.write("\" class=\"email\">");
-        _ = try out.write(data);
+        _ = try writeProtectedText(data, out);
         _ = try out.write("</a>");
     } else {
         _ = try out.write("<a href=\"");
-        _ = try out.write(data);
+        _ = try writeProtectedText(data, out);
         _ = try out.write("\" class=\"uri\">");
-        _ = try out.write(data);
+        _ = try writeProtectedText(data, out);
         _ = try out.write("</a>");
+    }
+}
+
+fn writeProtectedText(data: []const u8, out: std.fs.File) !void {
+    var startpos: usize = 0;
+    var endpos: usize = 0;
+
+    while (true) {
+        endpos = endpos + 1;
+        if (endpos == data.len) {
+            _ = try out.write(data[startpos..endpos]);
+            return;
+        }
+
+        const ch = data[endpos];
+        if (ch == '<') {
+            _ = try out.write(data[startpos..endpos]);
+            startpos = endpos + 1;
+            _ = try out.write("&lt;");
+        } else if (ch == '&') {
+            _ = try out.write(data[startpos..endpos]);
+            startpos = endpos + 1;
+            _ = try out.write("&amp;");
+        }
     }
 }
 
@@ -147,4 +171,10 @@ pub fn displayEvents(allocator: *const std.mem.Allocator, path: [:0]const u8) !v
 test "one" {
     const ta = std.testing.allocator;
     try md2htmlFile(ta, "testdata/md01.md");
+}
+
+test "writeprotected" {
+    const out = std.fs.File.stdout();
+
+    try writeProtectedText("alpha < beta & gamma.\n", out);
 }
