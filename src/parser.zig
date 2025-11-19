@@ -27,6 +27,8 @@ const State = enum {
     inlinktitle,
     inlinkurl,
     inshortlink,
+    inunorderedlist,
+    inunorderedlistitem,
     leavingpara,
     leavinghead1,
     leavinghead2,
@@ -44,6 +46,8 @@ const State = enum {
     leavinglinktitle,
     leavinglinkurl,
     leavingshortlink,
+    leavingunorderedlist,
+    leavingunorderedlistitem,
     end,
     undef,
 };
@@ -68,6 +72,8 @@ pub const ElemType = enum {
     startLinkTitle,
     startLinkUrl,
     startShortLink,
+    startUnorderedList,
+    startUnorderedListItem,
     endHead1,
     endHead2,
     endHead3,
@@ -85,6 +91,8 @@ pub const ElemType = enum {
     endLinkTitle,
     endLinkUrl,
     endShortLink,
+    endUnorderedList,
+    endUnorderedListItem,
     horizontalRule,
     text,
     lineBreak,
@@ -224,83 +232,15 @@ pub fn next(self: *Iterator) !Element {
             skipBytes(self, 1);
             skipSpaces(self);
             return mkElement(ElemType.startBlockquote);
+        } else if (peek(self, "-")) {
+            self.setState(State.inunorderedlist);
+            return mkElement(ElemType.startUnorderedList);
         } else {
             self.setState(State.inpara);
             return mkElement(ElemType.startPara);
         }
     } else if (self.getState() == State.inpara) {
-        skipNL(self);
-
-        const posstart = self.pos;
-
-        while (true) {
-            if (parseParagraph(self)) {
-                self.setState(State.leavingpara);
-                if (!eod(self)) {
-                    self.pos = self.pos + 1;
-                }
-                break;
-            } else {
-                if (peek(self, "***")) {
-                    if (posstart == self.pos) {
-                        self.pos = self.pos + 3;
-                        self.pushState(State.inbolditalic);
-                        return mkElement(ElemType.startBoldItalic);
-                    }
-                    break;
-                } else if (peek(self, "**")) {
-                    if (posstart == self.pos) {
-                        self.pos = self.pos + 2;
-                        self.pushState(State.inbold);
-                        return mkElement(ElemType.startBold);
-                    }
-                    break;
-                } else if (peek(self, "*")) {
-                    if (posstart == self.pos) {
-                        self.pos = self.pos + 1;
-                        self.pushState(State.initalic);
-                        return mkElement(ElemType.startItalic);
-                    }
-                    break;
-                } else if (peek(self, "`")) {
-                    if (posstart == self.pos) {
-                        self.pos = self.pos + 1;
-                        self.pushState(State.incode);
-                        return mkElement(ElemType.startCode);
-                    }
-                    break;
-                } else if (checkLink(self)) {
-                    if (posstart == self.pos) {
-                        self.pushState(State.inlink);
-                        return mkElement(ElemType.startLink);
-                    }
-                    break;
-                } else if (checkShortLink(self)) {
-                    if (posstart == self.pos) {
-                        self.pushState(State.inshortlink);
-                        return mkElement(ElemType.startShortLink);
-                    }
-                    break;
-                } else if (trailingWhiteSpace(self, false)) {
-                    if (posstart == self.pos) {
-                        _ = trailingWhiteSpace(self, true);
-                        return mkElement(ElemType.lineBreak);
-                    }
-                    break;
-                } else {
-                    self.pos = self.pos + 1;
-                }
-            }
-        }
-
-        if (eod(self) or !peek(self, "\n")) {
-            return mkTextElement(self, posstart);
-        } else {
-            self.pos = self.pos - 1;
-            const elem = mkTextElement(self, posstart);
-            self.pos = self.pos + 1;
-            return elem;
-        }
+        return try processParagraph(self);
     } else if (self.getState() == State.inhead1) {
         self.setState(State.leavinghead1);
         const posstart = self.pos;
@@ -534,6 +474,21 @@ pub fn next(self: *Iterator) !Element {
         }
     } else if (self.getState() == State.end) {
         return mkElement(ElemType.endDocument);
+    } else if (self.getState() == State.inunorderedlist) {
+        if (peek(self, "-")) {
+            self.pos = self.pos + 1;
+            skipSpaces(self);
+            self.setState(State.inunorderedlistitem);
+            return mkElement(ElemType.startUnorderedListItem);
+        } else {
+            self.setState(State.indoc);
+            return mkElement(ElemType.endUnorderedList);
+        }
+    } else if (self.getState() == State.inunorderedlistitem) {
+        return try processUnorderedListItem(self);
+    } else if (self.getState() == State.leavingunorderedlistitem) {
+        self.setState(State.inunorderedlist);
+        return mkElement(ElemType.endUnorderedListItem);
     } else {
         std.debug.print("unexpected state: {any}\n", .{self.getState()});
         return CommandLineParserError.BadState;
@@ -597,7 +552,17 @@ fn parseParagraph(self: *Iterator) bool {
             if (self.pos + 1 < self.data.len and (self.data[self.pos + 1] == '\r' or self.data[self.pos + 1] == '\n')) {
                 return true;
             }
+
+            if (self.getState() == State.inunorderedlistitem) {
+                if (self.pos < self.data.len - 2) {
+                    if (self.data[self.pos + 1] == '-') {
+                        return true;
+                    }
+                }
+            }
         }
+
+        //std.debug.print("--> {any}", .{self.getState()});
 
         if (checkSpecialCharacter(ch)) {
             return false;
@@ -772,6 +737,119 @@ fn peekAt(self: *Iterator, prefix: [:0]const u8, startpos: usize) bool {
     }
 
     return true;
+}
+
+fn processUnorderedListItem(self: *Iterator) !Element {
+    const elem = processParagraph(self);
+    if (self.getState() == State.leavingpara) {
+        self.setState(State.leavingunorderedlistitem);
+    }
+    return elem;
+}
+
+fn processParagraph(self: *Iterator) !Element {
+    skipNL(self);
+
+    const posstart = self.pos;
+
+    while (true) {
+        if (parseParagraph(self)) {
+            self.setState(State.leavingpara);
+            if (!eod(self)) {
+                self.pos = self.pos + 1;
+            }
+            break;
+        } else {
+            if (peek(self, "***")) {
+                if (posstart == self.pos) {
+                    self.pos = self.pos + 3;
+                    self.pushState(State.inbolditalic);
+                    return mkElement(ElemType.startBoldItalic);
+                }
+                break;
+            } else if (peek(self, "**")) {
+                if (posstart == self.pos) {
+                    self.pos = self.pos + 2;
+                    self.pushState(State.inbold);
+                    return mkElement(ElemType.startBold);
+                }
+                break;
+            } else if (peek(self, "*")) {
+                if (posstart == self.pos) {
+                    self.pos = self.pos + 1;
+                    self.pushState(State.initalic);
+                    return mkElement(ElemType.startItalic);
+                }
+                break;
+            } else if (peek(self, "`")) {
+                if (posstart == self.pos) {
+                    self.pos = self.pos + 1;
+                    self.pushState(State.incode);
+                    return mkElement(ElemType.startCode);
+                }
+                break;
+            } else if (checkLink(self)) {
+                if (posstart == self.pos) {
+                    self.pushState(State.inlink);
+                    return mkElement(ElemType.startLink);
+                }
+                break;
+            } else if (checkShortLink(self)) {
+                if (posstart == self.pos) {
+                    self.pushState(State.inshortlink);
+                    return mkElement(ElemType.startShortLink);
+                }
+                break;
+            } else if (trailingWhiteSpace(self, false)) {
+                if (posstart == self.pos) {
+                    _ = trailingWhiteSpace(self, true);
+                    return mkElement(ElemType.lineBreak);
+                }
+                break;
+            } else {
+                self.pos = self.pos + 1;
+            }
+        }
+    }
+
+    if (eod(self) or !peek(self, "\n")) {
+        if (self.data[self.pos - 1] == '\n') {
+            self.pos = self.pos - 1;
+            const elem = mkTextElement(self, posstart);
+            self.pos = self.pos + 1;
+            return elem;
+        } else {
+            return mkTextElement(self, posstart);
+        }
+    } else {
+        self.pos = self.pos - 1;
+        const elem = mkTextElement(self, posstart);
+        self.pos = self.pos + 1;
+        return elem;
+    }
+}
+
+fn printCurrentText(self: *Iterator) void {
+    std.debug.print(">|", .{});
+    for (0..10) |ii| {
+        if (self.pos + ii < self.data.len) {
+            std.debug.print("{c}", .{self.data[self.pos + ii]});
+        }
+    }
+    std.debug.print("|\n", .{});
+}
+
+fn printCurrentTextAt(self: *Iterator, pos: usize) void {
+    std.debug.print(">|", .{});
+    for (0..10) |ii| {
+        if (pos + ii < self.data.len) {
+            if (pos + ii == self.pos) {
+                std.debug.print("@@@", .{});
+            }
+            std.debug.print("{c}", .{self.data[pos + ii]});
+        }
+    }
+    std.debug.print("|\n", .{});
 }
 
 test "one" {

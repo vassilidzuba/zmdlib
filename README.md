@@ -44,7 +44,7 @@ where `ElemType` is an `enum` (look the source for details).
 
 ## Functionnalities
 
-The reference used to the markdeown syntax is [https://www.markdownguide.org/basic-syntax/](https://www.markdownguide.org/basic-syntax/).
+The reference used to the markdeown syntax is <https://www.markdownguide.org/basic-syntax/>.
 
 At the moment, the following markdown tags are supported:
 
@@ -56,6 +56,7 @@ At the moment, the following markdown tags are supported:
 - horizontal rule
 - linebreak (as trailing spaces)
 - links and URLs/email addresses
+- unordered list (one level°)
 
 warning: UTF-8 is not supported (yet).
 
@@ -65,3 +66,11 @@ This program converts a markdown file into an html file.
 Use is :
 
     tohtml [--output OUTPUTFILE] INPUTFILE
+
+## TODO
+
+- add titles to links
+- support emphasis over several lines
+- protect `<` and `&`
+- normalize spaces
+- embedded lists

@@ -4,6 +4,7 @@ const cli = @import("cli");
 
 var config = struct {
     help: ?bool = false,
+    event: ?bool = false,
     output: ?[:0]const u8 = null,
     operands: std.ArrayList([:0]u8) = .empty,
 }{};
@@ -24,6 +25,7 @@ pub fn main() !void {
         .desc = "convert markdown to html",
         .options = &.{
             .{ .help = "display this help", .short_name = 'h', .long_name = "help", .ref = cli.ValueRef{ .boolean = &config.help } },
+            .{ .help = "display events", .short_name = 'e', .long_name = "events", .ref = cli.ValueRef{ .boolean = &config.event } },
             .{ .help = "output file", .short_name = 'o', .long_name = "output", .ref = cli.ValueRef{ .string = &config.output } },
         },
         .exec = runit,
@@ -41,6 +43,20 @@ pub fn main() !void {
 }
 
 fn runit(allocator: *const std.mem.Allocator) !void {
+    if (config.event.?) {
+        try runDisplayEvents(allocator);
+    } else {
+        try runConvert(allocator);
+    }
+}
+
+fn runDisplayEvents(allocator: *const std.mem.Allocator) !void {
+    for (config.operands.items) |path| {
+        try zmdlib.displayEvents(allocator, path);
+    }
+}
+
+fn runConvert(allocator: *const std.mem.Allocator) !void {
     for (config.operands.items) |path| {
         if (config.output) |output| {
             std.debug.print("Converting {s} !\n", .{path});

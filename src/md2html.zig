@@ -89,6 +89,10 @@ fn convert(it: *parser.Iterator, out: std.fs.File) !void {
             },
             parser.ElemType.startShortLink => inshortlink = true,
             parser.ElemType.endShortLink => inshortlink = false,
+            parser.ElemType.startUnorderedList => try out.write("<ul>\n"),
+            parser.ElemType.endUnorderedList => try out.write("</ul>\n"),
+            parser.ElemType.startUnorderedListItem => try out.write("<li>"),
+            parser.ElemType.endUnorderedListItem => try out.write("</li>\n"),
             parser.ElemType.noop => {},
             else => std.debug.print("??? {any}\n", .{elem.type}),
         };
@@ -119,6 +123,25 @@ fn isMailAddress(data: []const u8) bool {
         }
     }
     return false;
+}
+
+pub fn displayEvents(allocator: *const std.mem.Allocator, path: [:0]const u8) !void {
+    var it = try parser.parseFile(allocator, path);
+    defer it.deinit();
+
+    while (true) {
+        const elem = try parser.next(&it);
+
+        if (elem.type == parser.ElemType.endDocument) {
+            return;
+        }
+
+        if (elem.type == parser.ElemType.text) {
+            std.debug.print(">    {s}\n", .{elem.content.?});
+        } else {
+            std.debug.print("> {any}\n", .{elem.type});
+        }
+    }
 }
 
 test "one" {

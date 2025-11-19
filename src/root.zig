@@ -11,3 +11,4 @@ pub const Element = parser.Element;
 pub const ElementType = parser.ElementType;
 
 pub const md2htmlFile = md2html.md2htmlFile;
+pub const displayEvents = md2html.displayEvents;
