@@ -10,7 +10,9 @@ The use of the library is as follows:
 
 - use functions `parse` or `parseFile` to obtain an `Iterator`
 - call the iterator to obtain the Elements, and do something with them
-- free the iteratore once the work is completed
+- free the iteratore once the work is completed.
+
+Here is a skeleton of the use of the lib/
 
     const a : std.mem.Allocator = ...;
 
@@ -20,7 +22,7 @@ The use of the library is as follows:
     while (true) {
         const elem = try next(&it);
 
-        // do somthing with elem
+        // do something with elem
 
         if (elem.type == ElemType.endDocument) {
             break;
@@ -65,7 +67,9 @@ warning: UTF-8 is not supported (yet).
 This program converts a markdown file into an html file.
 Use is :
 
-    tohtml [--output OUTPUTFILE] INPUTFILE
+    tohtml [-s | --snippet] [--output OUTPUTFILE] INPUTFILE
+
+The option `-s` / `--snippet` prevents froml outputting the heading tags.
 
 ## TODO
 

@@ -5,6 +5,7 @@ const cli = @import("cli");
 var config = struct {
     help: ?bool = false,
     event: ?bool = false,
+    snippet: ?bool = false,
     output: ?[:0]const u8 = null,
     operands: std.ArrayList([:0]u8) = .empty,
 }{};
@@ -26,6 +27,7 @@ pub fn main() !void {
         .options = &.{
             .{ .help = "display this help", .short_name = 'h', .long_name = "help", .ref = cli.ValueRef{ .boolean = &config.help } },
             .{ .help = "display events", .short_name = 'e', .long_name = "events", .ref = cli.ValueRef{ .boolean = &config.event } },
+            .{ .help = "no html tag", .short_name = 's', .long_name = "snippet", .ref = cli.ValueRef{ .boolean = &config.snippet } },
             .{ .help = "output file", .short_name = 'o', .long_name = "output", .ref = cli.ValueRef{ .string = &config.output } },
         },
         .exec = runit,
@@ -67,10 +69,10 @@ fn runConvert(allocator: *const std.mem.Allocator) !void {
             );
             defer file.close();
 
-            try zmdlib.md2htmlFile(allocator, path, file);
+            try zmdlib.md2htmlFile(allocator, path, file, .{ .snippet = config.snippet.? });
         } else {
             std.debug.print("Converting {s} !\n\n\n", .{path});
-            try zmdlib.md2htmlFile(allocator, path, null);
+            try zmdlib.md2htmlFile(allocator, path, null, .{ .snippet = config.snippet.? });
         }
     }
 }

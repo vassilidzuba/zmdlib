@@ -1,3 +1,8 @@
 .zig-cache/
 zig-out/
+testdata/in
+testdata/out
+testdata/ref
 *.o
+*.sh
+nonreg.txt

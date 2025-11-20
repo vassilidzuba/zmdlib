@@ -875,7 +875,7 @@ test "one" {
 test "two" {
     const ta = std.testing.allocator;
 
-    var it = try parseFile(ta, "testdata/md02.md");
+    var it = try parseFile(&ta, "testdata/md02.md");
     defer it.deinit();
 
     while (true) {
