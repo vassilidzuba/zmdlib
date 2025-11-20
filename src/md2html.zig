@@ -34,6 +34,7 @@ fn convert(it: *parser.Iterator, out: std.fs.File, config: Md2htmlConfig) !void 
     var inheading: bool = false;
     var headingbuf: [1000]u8 = undefined;
     var heading: []const u8 = undefined;
+    var inpara: bool = false;
 
     while (true) {
         const elem = try parser.next(it);
@@ -54,8 +55,8 @@ fn convert(it: *parser.Iterator, out: std.fs.File, config: Md2htmlConfig) !void 
             parser.ElemType.endHead1 => try endHeading("h1", &inheading, out),
             parser.ElemType.startHead2 => try startHeading("h2", &inheading, out),
             parser.ElemType.endHead2 => try endHeading("h2", &inheading, out),
-            parser.ElemType.startHead3 => try endHeading("h3", &inheading, out),
-            parser.ElemType.endHead3 => try endHeading("h4", &inheading, out),
+            parser.ElemType.startHead3 => try startHeading("h3", &inheading, out),
+            parser.ElemType.endHead3 => try endHeading("h3", &inheading, out),
             parser.ElemType.startHead4 => try startHeading("h4", &inheading, out),
             parser.ElemType.endHead4 => try endHeading("h4", &inheading, out),
             parser.ElemType.startHead5 => try startHeading("h5", &inheading, out),
@@ -64,8 +65,8 @@ fn convert(it: *parser.Iterator, out: std.fs.File, config: Md2htmlConfig) !void 
             parser.ElemType.endHead6 => try endHeading("h6", &inheading, out),
             parser.ElemType.startBlockquote => try out.write("<blockquote>\n"),
             parser.ElemType.endBlockquote => try out.write("</blockquote>\n"),
-            parser.ElemType.startPara => try out.write("<p>"),
-            parser.ElemType.endPara => try out.write("</p>\n"),
+            parser.ElemType.startPara => try startPara(&inpara, out),
+            parser.ElemType.endPara => try endPara(&inpara, out),
             parser.ElemType.startBold => try out.write("<strong>"),
             parser.ElemType.endBold => try out.write("</strong>"),
             parser.ElemType.startItalic => try out.write("<em>"),
@@ -81,6 +82,8 @@ fn convert(it: *parser.Iterator, out: std.fs.File, config: Md2htmlConfig) !void 
             parser.ElemType.text => {
                 if (inlinktitle) {
                     linktitle = elem.content.?;
+                } else if (inlinktitle) {
+                    _ = try writeProtectedText(elem.content.?, out, true);
                 } else if (inlinkurl) {
                     linkurl = elem.content.?;
                 } else if (inheading) {
@@ -91,7 +94,7 @@ fn convert(it: *parser.Iterator, out: std.fs.File, config: Md2htmlConfig) !void 
                 } else if (inshortlink) {
                     try writeShortLink(elem.content.?, out);
                 } else {
-                    _ = try writeProtectedText(elem.content.?, out);
+                    _ = try writeProtectedText(elem.content.?, out, inpara);
                 }
             },
             parser.ElemType.startLink => {},
@@ -101,9 +104,9 @@ fn convert(it: *parser.Iterator, out: std.fs.File, config: Md2htmlConfig) !void 
             parser.ElemType.endLinkUrl => inlinkurl = false,
             parser.ElemType.endLink => {
                 _ = try out.write("<a href=\"");
-                _ = try writeProtectedText(linkurl.?, out);
+                _ = try writeProtectedText(linkurl.?, out, false);
                 _ = try out.write("\">");
-                _ = try writeProtectedText(linktitle.?, out);
+                _ = try writeProtectedText(linktitle.?, out, false);
                 _ = try out.write("</a>");
             },
             parser.ElemType.startShortLink => inshortlink = true,
@@ -121,22 +124,24 @@ fn convert(it: *parser.Iterator, out: std.fs.File, config: Md2htmlConfig) !void 
 fn writeShortLink(data: []const u8, out: std.fs.File) !void {
     if (isMailAddress(data)) {
         _ = try out.write("<a href=\"mailto:");
-        _ = try writeProtectedText(data, out);
+        _ = try writeProtectedText(data, out, false);
         _ = try out.write("\" class=\"email\">");
-        _ = try writeProtectedText(data, out);
+        _ = try writeProtectedText(data, out, false);
         _ = try out.write("</a>");
     } else {
         _ = try out.write("<a href=\"");
-        _ = try writeProtectedText(data, out);
+        _ = try writeProtectedText(data, out, false);
         _ = try out.write("\" class=\"uri\">");
-        _ = try writeProtectedText(data, out);
+        _ = try writeProtectedText(data, out, false);
         _ = try out.write("</a>");
     }
 }
 
-fn writeProtectedText(data: []const u8, out: std.fs.File) !void {
+fn writeProtectedText(data: []const u8, out: std.fs.File, inpara: bool) !void {
     var startpos: usize = 0;
     var endpos: usize = 0;
+
+    var isspace: bool = false;
 
     while (true) {
         endpos = endpos + 1;
@@ -150,11 +155,42 @@ fn writeProtectedText(data: []const u8, out: std.fs.File) !void {
             _ = try out.write(data[startpos..endpos]);
             startpos = endpos + 1;
             _ = try out.write("&lt;");
+        } else if (ch == '>') {
+            _ = try out.write(data[startpos..endpos]);
+            startpos = endpos + 1;
+            _ = try out.write("&gt;");
         } else if (ch == '&') {
             _ = try out.write(data[startpos..endpos]);
             startpos = endpos + 1;
             _ = try out.write("&amp;");
+        } else if (ch == '"') {
+            _ = try out.write(data[startpos..endpos]);
+            startpos = endpos + 1;
+            _ = try out.write("&quot;");
+        } else if (ch == ' ') {
+            if (isspace and inpara) {
+                _ = try out.write(data[startpos..endpos]);
+                startpos = endpos + 1;
+            } else {
+                isspace = true;
+            }
+            continue;
+        } else if (ch == '\r' and inpara) {
+            _ = try out.write(data[startpos..endpos]);
+            startpos = endpos + 1;
+            if (isspace and inpara) {
+                continue;
+            }
+        } else if (ch == '\n' and inpara) {
+            _ = try out.write(data[startpos..endpos]);
+            startpos = endpos + 1;
+            if (isspace and inpara) {
+                continue;
+            }
+            _ = try out.write(" ");
         }
+
+        isspace = false;
     }
 }
 
@@ -195,6 +231,8 @@ fn copyHeading(heading: []u8, data: []const u8) []const u8 {
     for (data) |ch| {
         if (ch == ' ') {
             heading[pos] = '-';
+        } else if (ch == '.' and pos == 0) {
+            continue;
         } else if (ch >= 'A' and ch <= 'Z') {
             const ch2 = ch + ('a' - 'A');
             heading[pos] = ch2;
@@ -221,6 +259,16 @@ fn endHeading(tag: []const u8, flag: *bool, out: std.fs.File) !void {
     flag.* = false;
 }
 
+fn startPara(flag: *bool, out: std.fs.File) !void {
+    _ = try out.write("<p>");
+    flag.* = true;
+}
+
+fn endPara(flag: *bool, out: std.fs.File) !void {
+    _ = try out.write("</p>\n");
+    flag.* = false;
+}
+
 test "one" {
     const ta = std.testing.allocator;
     try md2htmlFile(&ta, "testdata/md01.md", null);
@@ -237,6 +285,17 @@ test "heading" {
         \\# Horrendous Title
         \\
         \\some data
+    ;
+
+    try md2html(text, .{});
+}
+
+test "para" {
+    const text =
+        \\# Horrendous Title
+        \\
+        \\Some data.
+        \\And more data.
     ;
 
     try md2html(text, .{});

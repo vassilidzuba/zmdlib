@@ -380,7 +380,7 @@ pub fn next(self: *Iterator) !Element {
             self.pos = self.pos + 4;
             const posstart = self.pos;
             skipEndOfLineStrict(self);
-            if (!eod(self)) {
+            if (self.pos + 1 < self.data.len and self.data[self.pos + 1] != '\n') {
                 self.pos = self.pos + 1;
             }
             return mkTextElement(self, posstart);
