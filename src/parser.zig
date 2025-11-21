@@ -106,7 +106,7 @@ pub const Element = struct {
 };
 
 pub const Iterator = struct {
-    allocator: ?*const std.mem.Allocator = null,
+    allocator: ?std.mem.Allocator = null,
     tobefreed: ?[]u8 = null,
     data: []const u8,
     pos: usize = 0,
@@ -147,7 +147,7 @@ pub fn parse(text: []const u8) !Iterator {
     return Iterator{ .data = text };
 }
 
-pub fn parseFile(allocator: *const std.mem.Allocator, path: [:0]const u8) !Iterator {
+pub fn parseFile(allocator: std.mem.Allocator, path: [:0]const u8) !Iterator {
     const file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
@@ -875,7 +875,7 @@ test "one" {
 test "two" {
     const ta = std.testing.allocator;
 
-    var it = try parseFile(&ta, "testdata/md02.md");
+    var it = try parseFile(ta, "testdata/md02.md");
     defer it.deinit();
 
     while (true) {

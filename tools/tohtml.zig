@@ -44,7 +44,7 @@ pub fn main() !void {
     }
 }
 
-fn runit(allocator: *const std.mem.Allocator) !void {
+fn runit(allocator: std.mem.Allocator) !void {
     if (config.event.?) {
         try runDisplayEvents(allocator);
     } else {
@@ -52,13 +52,13 @@ fn runit(allocator: *const std.mem.Allocator) !void {
     }
 }
 
-fn runDisplayEvents(allocator: *const std.mem.Allocator) !void {
+fn runDisplayEvents(allocator: std.mem.Allocator) !void {
     for (config.operands.items) |path| {
         try zmdlib.displayEvents(allocator, path);
     }
 }
 
-fn runConvert(allocator: *const std.mem.Allocator) !void {
+fn runConvert(allocator: std.mem.Allocator) !void {
     for (config.operands.items) |path| {
         if (config.output) |output| {
             std.debug.print("Converting {s} !\n", .{path});
