@@ -21,7 +21,7 @@ pub const XmlWriter = struct {
     pub fn startDoc(self: *XmlWriter) !void {
         self.stack.clearRetainingCapacity();
         self.state = .start;
-        _ = try self.file.write("<?xml version=\"1.0\"?>\n");
+        _ = try self.file.write("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n");
     }
 
     pub fn endDoc(self: *XmlWriter) !void {
@@ -211,4 +211,22 @@ test "xmlwriter errors" {
     const err2 = xw.endDoc();
     try std.testing.expectError(XmlWriterError.MissingEndTags, err2);
     try xw.newline();
+}
+
+test "xmlwriter unicode" {
+    const ta = std.testing.allocator;
+
+    var xw = XmlWriter{
+        .allocator = ta,
+        .file = std.fs.File.stdout(),
+        .stack = try ArrayList([]const u8).initCapacity(ta, 20),
+    };
+    defer xw.deinit();
+
+    // too many endtags
+
+    try xw.startDoc();
+    try xw.startElement("doc", false);
+    try xw.text("zorro éèà \u{03B1} \u{A455} \u{65}\u{301} 😊 orroz");
+    try xw.endElement(true);
 }
