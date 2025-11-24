@@ -92,7 +92,6 @@ pub const UnicodeString = struct {
             const len1 = std.unicode.utf8ByteSequenceLength(self.data[pos1]) catch 0;
             const len2 = std.unicode.utf8ByteSequenceLength(prefix[pos2]) catch 0;
             if (len1 != len2) {
-                std.debug.print("yup\n", .{});
                 return false;
             }
             for (0..len1) |_| {
