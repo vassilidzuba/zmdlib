@@ -60,6 +60,7 @@ fn runDisplayEvents(allocator: std.mem.Allocator) !void {
 
 fn runConvert(allocator: std.mem.Allocator) !void {
     for (config.operands.items) |path| {
+        std.debug.print("parsing {s}\n", .{path});
         if (config.output) |output| {
             std.debug.print("Converting {s} !\n", .{path});
             std.debug.print("output file is {s} !\n\n\n", .{output});

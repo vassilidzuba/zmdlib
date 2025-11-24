@@ -22,8 +22,11 @@ const State = enum {
     inhead6,
     inpara,
     inbold,
+    inboldalt,
     initalic,
+    initalicalt,
     inbolditalic,
+    inbolditalicalt,
     incode,
     incodeblock,
     inlink,
@@ -42,8 +45,11 @@ const State = enum {
     inblockquote,
     leavingblockquote,
     leavingbold,
+    leavingboldalt,
     leavingitalic,
+    leavingitalicalt,
     leavingbolditalic,
+    leavingbolditalicalt,
     leavingcode,
     leavinglink,
     leavinglinktitle,
@@ -114,6 +120,7 @@ pub const Iterator = struct {
     data: UnicodeString,
     states: [5]State = .{ State.start, State.undef, State.undef, State.undef, State.undef },
     state_idx: usize = 0,
+    pending_element: ?Element = null,
 
     pub fn deinit(self: *Iterator) void {
         if (self.tobefreed) |tobefreed| {
@@ -151,6 +158,10 @@ pub const Iterator = struct {
         return self.data.lookNextChar();
     }
 
+    inline fn lookNextCharAt(self: *Iterator, pos: usize) !u21 {
+        return self.data.lookNextCharAt(pos);
+    }
+
     fn skip(self: *Iterator, nbchars: usize) bool {
         for (0..nbchars) |_| {
             if (!self.data.getNextChar()) {
@@ -160,15 +171,15 @@ pub const Iterator = struct {
         return true;
     }
 
-    inline fn peek(self: *Iterator, prefix: [:0]const u8) bool {
+    inline fn peek(self: *Iterator, prefix: []const u8) bool {
         return self.data.peek(prefix);
     }
 
-    inline fn peekAt(self: *Iterator, prefix: [:0]const u8, pos: usize) bool {
+    inline fn peekAt(self: *Iterator, prefix: []const u8, pos: usize) bool {
         return self.data.peekAt(prefix, pos);
     }
 
-    inline fn peekAfter(self: *Iterator, prefix: [:0]const u8, pos: isize) bool {
+    inline fn peekAfter(self: *Iterator, prefix: []const u8, pos: isize) bool {
         const datapos: isize = @intCast(self.data.pos);
         const delta: isize = datapos + pos;
         return self.data.peekAt(prefix, @intCast(delta));
@@ -193,6 +204,22 @@ pub const Iterator = struct {
     inline fn skipChars(self: *Iterator, nbchars: usize) void {
         self.data.skipChars(nbchars);
     }
+
+    inline fn mark(self: *Iterator) void {
+        self.data.mark();
+    }
+
+    inline fn atmark(self: *Iterator) bool {
+        return self.data.atmark();
+    }
+
+    inline fn reset(self: *Iterator) void {
+        self.data.reset();
+    }
+
+    inline fn getMarkedArea(self: *Iterator) []const u8 {
+        return self.data.getMarkedArea();
+    }
 };
 
 pub fn mkIterator(text: []const u8) Iterator {
@@ -201,18 +228,13 @@ pub fn mkIterator(text: []const u8) Iterator {
 }
 
 pub fn parse(text: []const u8) !Iterator {
-    std.debug.print("parsing text <\n{s}\n>\n", .{text});
     const us = UnicodeString{ .data = text };
     return Iterator{ .data = us };
 }
 
 pub fn parseFile(allocator: std.mem.Allocator, path: [:0]const u8) !Iterator {
-    const file = try std.fs.cwd().openFile(path, .{});
-    defer file.close();
+    const buffer = try getBuffer(allocator, path);
 
-    const file_size = try file.getEndPos();
-    const buffer = try allocator.alloc(u8, file_size);
-    _ = try file.readAll(buffer);
     const us = UnicodeString{ .data = buffer };
 
     return Iterator{
@@ -222,7 +244,30 @@ pub fn parseFile(allocator: std.mem.Allocator, path: [:0]const u8) !Iterator {
     };
 }
 
+fn getBuffer(allocator: std.mem.Allocator, path: [:0]const u8) ![]u8 {
+    if (std.mem.eql(u8, path, "-")) {
+        std.debug.print("goth -\n", .{});
+        const buffer = try allocator.alloc(u8, 10024);
+        //const stdin = std.fs.File.stdin().reader(buffer);
+        //const result = try stdin.readUntilDelimiter(&buffer, '\n');
+        //_ = result;
+        return buffer;
+    } else {
+        var file: std.fs.File = try std.fs.cwd().openFile(path, .{});
+        defer file.close();
+        const file_size = try file.getEndPos();
+        const buffer = try allocator.alloc(u8, file_size);
+        _ = try file.readAll(buffer);
+        return buffer;
+    }
+}
+
 pub fn next(self: *Iterator) !Element {
+    if (self.pending_element) |pe| {
+        self.pending_element = null;
+        return pe;
+    }
+
     if (self.getState() == State.start) {
         self.setState(State.indoc);
         return Element{
@@ -372,6 +417,28 @@ pub fn next(self: *Iterator) !Element {
 
         const elem = mkTextElement(self, posstart);
         return elem;
+    } else if (self.getState() == State.inboldalt) {
+        const posstart = self.data.pos;
+
+        while (true) {
+            if (skipEndOfLine(self)) {
+                _ = self.getNextChar();
+                self.setState(State.leavingboldalt);
+                break;
+            } else {
+                if (self.peek("__")) {
+                    const elem = mkTextElement(self, posstart);
+                    _ = self.getNextChar();
+                    _ = self.getNextChar();
+                    self.setState(State.leavingboldalt);
+                    return elem;
+                }
+                _ = self.getNextChar();
+            }
+        }
+
+        const elem = mkTextElement(self, posstart);
+        return elem;
     } else if (self.getState() == State.initalic) {
         const posstart = self.data.pos;
 
@@ -385,6 +452,26 @@ pub fn next(self: *Iterator) !Element {
                     const elem = mkTextElement(self, posstart);
                     _ = self.getNextChar();
                     self.setState(State.leavingitalic);
+                    return elem;
+                }
+                _ = self.getNextChar();
+            }
+        }
+
+        return mkTextElement(self, posstart);
+    } else if (self.getState() == State.initalicalt) {
+        const posstart = self.data.pos;
+
+        while (true) {
+            if (skipEndOfLine(self)) {
+                _ = self.getNextChar();
+                self.setState(State.leavingitalicalt);
+                break;
+            } else {
+                if (self.peek("_")) {
+                    const elem = mkTextElement(self, posstart);
+                    _ = self.getNextChar();
+                    self.setState(State.leavingitalicalt);
                     return elem;
                 }
                 _ = self.getNextChar();
@@ -414,6 +501,28 @@ pub fn next(self: *Iterator) !Element {
         }
 
         return mkTextElement(self, posstart);
+    } else if (self.getState() == State.inbolditalicalt) {
+        const posstart = self.data.pos;
+
+        while (true) {
+            if (skipEndOfLine(self)) {
+                _ = self.getNextChar();
+                self.setState(State.leavingbolditalicalt);
+                break;
+            } else {
+                if (self.peek("___")) {
+                    const elem = mkTextElement(self, posstart);
+                    _ = self.getNextChar();
+                    _ = self.getNextChar();
+                    _ = self.getNextChar();
+                    self.setState(State.leavingbolditalicalt);
+                    return elem;
+                }
+                _ = self.getNextChar();
+            }
+        }
+
+        return mkTextElement(self, posstart);
     } else if (self.getState() == State.incode) {
         const posstart = self.data.pos;
 
@@ -423,7 +532,6 @@ pub fn next(self: *Iterator) !Element {
                 self.setState(State.leavingcode);
                 break;
             } else {
-                //std.debug.print(">>> {s}", .{self.data[self.pos .. self.pos + 2]});
                 if (self.peek("`")) {
                     const elem = mkTextElement(self, posstart);
                     _ = self.getNextChar();
@@ -480,12 +588,39 @@ pub fn next(self: *Iterator) !Element {
         return mkElement(ElemType.endBlockquote);
     } else if (self.getState() == State.leavingbold) {
         _ = try self.popState();
+        if (self.peek("\n") and !self.peek("\n\n")) {
+            self.pending_element = mkTextElementWithData(" ");
+        }
+        return mkElement(ElemType.endBold);
+    } else if (self.getState() == State.leavingboldalt) {
+        _ = try self.popState();
+        if (self.peek("\n") and !self.peek("\n\n")) {
+            self.pending_element = mkTextElementWithData(" ");
+        }
         return mkElement(ElemType.endBold);
     } else if (self.getState() == State.leavingitalic) {
         _ = try self.popState();
+        if (self.peek("\n") and !self.peek("\n\n")) {
+            self.pending_element = mkTextElementWithData(" ");
+        }
+        return mkElement(ElemType.endItalic);
+    } else if (self.getState() == State.leavingitalicalt) {
+        _ = try self.popState();
+        if (self.peek("\n") and !self.peek("\n\n")) {
+            self.pending_element = mkTextElementWithData(" ");
+        }
         return mkElement(ElemType.endItalic);
     } else if (self.getState() == State.leavingbolditalic) {
         _ = try self.popState();
+        if (self.peek("\n") and !self.peek("\n\n")) {
+            self.pending_element = mkTextElementWithData(" ");
+        }
+        return mkElement(ElemType.endBoldItalic);
+    } else if (self.getState() == State.leavingbolditalicalt) {
+        _ = try self.popState();
+        if (self.peek("\n") and !self.peek("\n\n")) {
+            self.pending_element = mkTextElementWithData(" ");
+        }
         return mkElement(ElemType.endBoldItalic);
     } else if (self.getState() == State.leavingcode) {
         _ = try self.popState();
@@ -574,6 +709,13 @@ fn mkTextElement(self: *Iterator, start: usize) Element {
     };
 }
 
+fn mkTextElementWithData(data: []const u8) Element {
+    return Element{
+        .type = ElemType.text,
+        .content = data,
+    };
+}
+
 fn mkLinkElement(_: *Iterator) Element {
     return Element{
         .type = ElemType.link,
@@ -591,9 +733,7 @@ fn parseParagraph(self: *Iterator) bool {
         const ch = self.lookNextChar() catch 0;
 
         if (ch == '\n') {
-            _ = self.getNextChar();
-            if (self.peek("\r") or self.peek("\n")) {
-                self.data.pos = self.data.pos - 1;
+            if (self.peekAt("\n", 1)) {
                 return true;
             }
 
@@ -726,7 +866,7 @@ fn advance(self: *Iterator, nbbytes: usize) bool {
 }
 
 fn checkSpecialCharacter(ch: u21) bool {
-    return ch == '*' or ch == '`' or ch == '[' or ch == '<';
+    return ch == '*' or ch == '_' or ch == '`' or ch == '[' or ch == '<';
 }
 
 fn checkIsRule(self: *Iterator) bool {
@@ -757,58 +897,83 @@ fn processUnorderedListItem(self: *Iterator) !Element {
 fn processParagraph(self: *Iterator) !Element {
     self.skipNL();
 
-    const posstart = self.data.pos;
+    self.mark();
 
     while (true) {
         if (parseParagraph(self)) {
             self.setState(State.leavingpara);
-            if (!self.eod()) {
-                _ = self.getNextChar();
-            }
             break;
         } else {
             if (self.peek("***")) {
-                if (posstart == self.data.pos) {
+                if (self.atmark()) {
                     self.skipChars(3);
                     self.pushState(State.inbolditalic);
                     return mkElement(ElemType.startBoldItalic);
                 }
                 break;
+            } else if (self.peek("***")) {
+                if (self.atmark()) {
+                    self.skipChars(3);
+                    self.pushState(State.inbolditalicalt);
+                    return mkElement(ElemType.startBoldItalic);
+                }
+                break;
             } else if (self.peek("**")) {
-                if (posstart == self.data.pos) {
+                if (self.atmark()) {
                     self.skipChars(2);
                     self.pushState(State.inbold);
                     return mkElement(ElemType.startBold);
                 }
                 break;
+            } else if (self.peek("___")) {
+                if (self.atmark()) {
+                    self.skipChars(3);
+                    self.pushState(State.inbolditalicalt);
+                    return mkElement(ElemType.startBoldItalic);
+                }
+                break;
+            } else if (self.peek("__")) {
+                if (self.atmark()) {
+                    self.skipChars(2);
+                    self.pushState(State.inboldalt);
+                    return mkElement(ElemType.startBold);
+                }
+                break;
             } else if (self.peek("*")) {
-                if (posstart == self.data.pos) {
+                if (self.atmark()) {
                     self.skipChars(1);
                     self.pushState(State.initalic);
                     return mkElement(ElemType.startItalic);
                 }
                 break;
+            } else if (self.peek("_")) {
+                if (self.atmark()) {
+                    self.skipChars(1);
+                    self.pushState(State.initalicalt);
+                    return mkElement(ElemType.startItalic);
+                }
+                break;
             } else if (self.peek("`")) {
-                if (posstart == self.data.pos) {
+                if (self.atmark()) {
                     self.skipChars(2);
                     self.pushState(State.incode);
                     return mkElement(ElemType.startCode);
                 }
                 break;
             } else if (checkLink(self)) {
-                if (posstart == self.data.pos) {
+                if (self.atmark()) {
                     self.pushState(State.inlink);
                     return mkElement(ElemType.startLink);
                 }
                 break;
             } else if (checkShortLink(self)) {
-                if (posstart == self.data.pos) {
+                if (self.atmark()) {
                     self.pushState(State.inshortlink);
                     return mkElement(ElemType.startShortLink);
                 }
                 break;
             } else if (trailingWhiteSpace(self, false)) {
-                if (posstart == self.data.pos) {
+                if (self.atmark()) {
                     _ = trailingWhiteSpace(self, true);
                     return mkElement(ElemType.lineBreak);
                 }
@@ -819,21 +984,7 @@ fn processParagraph(self: *Iterator) !Element {
         }
     }
 
-    if (self.eod() or !self.peek("\n")) {
-        if (self.peekAfter("\n", -1)) {
-            _ = self.skip(1);
-            const elem = mkTextElement(self, posstart);
-            _ = self.skip(1);
-            return elem;
-        } else {
-            return mkTextElement(self, posstart);
-        }
-    } else {
-        _ = self.skip(1);
-        const elem = mkTextElement(self, posstart);
-        _ = self.skip(1);
-        return elem;
-    }
+    return mkTextElementWithData(self.getMarkedArea());
 }
 
 fn printCurrentText(self: *Iterator) void {
@@ -979,4 +1130,12 @@ fn showEvents(it: *Iterator) !void {
             break;
         }
     }
+}
+
+fn print(text: []const u8) void {
+    std.debug.print("<<<{s}>>>\n", .{text});
+}
+
+fn printNext(it: *Iterator) void {
+    std.debug.print("|||{s}|||\n", .{it.data.data[it.data.pos..]});
 }

@@ -14,15 +14,23 @@ pub const UnicodeString = struct {
     posmark: usize = 0,
     curchar: []const u8 = undefined,
 
-    pub fn getNextChar(self: *UnicodeString) u21 {
+    pub fn getNextChar(self: *UnicodeString) bool {
         const newpos, const value = self.parseChar(self.pos) catch .{ 0, 0 };
+        if (value == 0) {
+            return false;
+        }
         self.curchar = self.data[self.pos..newpos];
         self.pos = newpos;
-        return value;
+        return true;
     }
 
     pub fn lookNextChar(self: *UnicodeString) !u21 {
         _, const value = try self.parseChar(self.pos);
+        return value;
+    }
+
+    pub fn lookNextCharAt(self: *UnicodeString, pos: usize) !u21 {
+        _, const value = try self.parseChar(self.pos + pos);
         return value;
     }
 
@@ -57,7 +65,7 @@ pub const UnicodeString = struct {
                 data[2] = self.data[pos + 3];
                 return .{ pos + len, try std.unicode.utf8Decode4(data) };
             },
-            else => return UnicodeStringError.badunicodechar;,
+            else => return UnicodeStringError.badunicodechar,
         };
 
         return .{ pos + len, value };
@@ -67,12 +75,12 @@ pub const UnicodeString = struct {
         return chptr.curchar;
     }
 
-    pub fn peek(self: *UnicodeString, prefix: [:0]const u8) bool {
-        return self.peekAt(prefix, self.pos);
+    pub fn peek(self: *UnicodeString, prefix: []const u8) bool {
+        return self.peekAt(prefix, 0);
     }
 
-    pub fn peekAt(self: *UnicodeString, prefix: [:0]const u8, pos: usize) bool {
-        var pos1 = pos;
+    pub fn peekAt(self: *UnicodeString, prefix: []const u8, pos: usize) bool {
+        var pos1 = self.pos + pos;
         var pos2: usize = 0;
         while (true) {
             if (pos2 >= prefix.len) {
@@ -84,6 +92,7 @@ pub const UnicodeString = struct {
             const len1 = std.unicode.utf8ByteSequenceLength(self.data[pos1]) catch 0;
             const len2 = std.unicode.utf8ByteSequenceLength(prefix[pos2]) catch 0;
             if (len1 != len2) {
+                std.debug.print("yup\n", .{});
                 return false;
             }
             for (0..len1) |_| {
@@ -148,9 +157,17 @@ pub const UnicodeString = struct {
         self.posmark = self.pos;
     }
 
+    pub fn atmark(self: *UnicodeString) bool {
+        return self.posmark == self.pos;
+    }
+
     pub fn reset(self: *UnicodeString) void {
         self.pos = self.posmarkl;
         self.posmark = 0;
+    }
+
+    pub fn getMarkedArea(self: *UnicodeString) []const u8 {
+        return self.data[self.posmark..self.pos];
     }
 };
 
@@ -185,4 +202,10 @@ test "unicode" {
     _ = chptr.getNextChar();
     _ = chptr.getNextChar();
     try std.testing.expect(chptr.eod());
+
+    chptr = UnicodeString{ .data = "12345" };
+    try std.testing.expect(chptr.peekAt("123", 0));
+    try std.testing.expect(chptr.peekAt("234", 1));
+    try std.testing.expectEqual(chptr.lookNextChar(), '1');
+    try std.testing.expectEqual(chptr.lookNextCharAt(1), '2');
 }

@@ -18,8 +18,6 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(lib);
 
-    const cli = b.dependency("cli", .{});
-
     const main_tests = b.addTest(.{
         .root_module = lib_mod,
     });
@@ -39,6 +37,8 @@ pub fn build(b: *std.Build) void {
             .path = "tools/tohtml.zig",
         },
     };
+
+    const cli = b.dependency("cli", .{});
 
     for (programs) |prog| {
         const program_mod = b.addModule(prog.name, .{
