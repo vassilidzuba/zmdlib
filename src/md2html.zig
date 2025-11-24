@@ -19,10 +19,10 @@ pub fn md2htmlFile(allocator: std.mem.Allocator, path: [:0]const u8, output: ?st
     try convert(&it, &xw, config);
 }
 
-pub fn md2html(allocator: std.mem.Allocator, text: []const u8, config: Md2htmlConfig) !void {
+pub fn md2html(allocator: std.mem.Allocator, text: []const u8, output: ?std.fs.File, config: Md2htmlConfig) !void {
     var it = try parser.parse(text);
 
-    var xw = try getXmlWriter(allocator, null);
+    var xw = try getXmlWriter(allocator, output);
     defer xw.deinit();
 
     try convert(&it, &xw, config);
@@ -180,6 +180,10 @@ fn writeProtectedText(data: []const u8, xw: *xmlwriter.XmlWriter, inpara: bool) 
 
     var isspace: bool = false;
 
+    if (data.len == 0) {
+        return;
+    }
+
     while (true) {
         endpos = endpos + 1;
         if (endpos == data.len) {
@@ -334,7 +338,7 @@ test "heading" {
         \\some data
     ;
 
-    try md2html(ta, text, .{});
+    try md2html(ta, text, std.fs.File.stdout(), .{});
 }
 
 test "para" {
@@ -346,5 +350,5 @@ test "para" {
         \\And more data.
     ;
 
-    try md2html(ta, text, .{});
+    try md2html(ta, text, std.fs.File.stdout(), .{});
 }
