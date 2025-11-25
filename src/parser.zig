@@ -246,12 +246,31 @@ pub fn parseFile(allocator: std.mem.Allocator, path: [:0]const u8) !Iterator {
 
 fn getBuffer(allocator: std.mem.Allocator, path: [:0]const u8) ![]u8 {
     if (std.mem.eql(u8, path, "-")) {
-        std.debug.print("goth -\n", .{});
-        const buffer = try allocator.alloc(u8, 10024);
-        //const stdin = std.fs.File.stdin().reader(buffer);
-        //const result = try stdin.readUntilDelimiter(&buffer, '\n');
-        //_ = result;
-        return buffer;
+        const stdin_buffer = try allocator.alloc(u8, 1024);
+        defer allocator.free(stdin_buffer);
+
+        const read_buffer_size: usize = 10;
+        const read_buffer = try allocator.alloc(u8, read_buffer_size);
+        defer allocator.free(read_buffer);
+
+        var buffer_used: usize = 0;
+        var buffer = try allocator.alloc(u8, read_buffer_size);
+
+        var stdin_reader = std.fs.File.stdin().reader(stdin_buffer);
+        var stdin = &stdin_reader.interface;
+        while (true) {
+            const nbbytes = try stdin.readSliceShort(read_buffer);
+            if (buffer_used + nbbytes > buffer.len) {
+                buffer = try allocator.realloc(buffer, buffer_used + nbbytes);
+            }
+            for (0..nbbytes) |ii| {
+                buffer[buffer_used + ii] = read_buffer[ii];
+            }
+            buffer_used = buffer_used + nbbytes;
+            if (nbbytes < read_buffer_size) {
+                return try allocator.realloc(buffer, buffer_used);
+            }
+        }
     } else {
         var file: std.fs.File = try std.fs.cwd().openFile(path, .{});
         defer file.close();
