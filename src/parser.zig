@@ -624,6 +624,9 @@ pub fn next(self: *Iterator) !Element {
         return mkElement(ElemType.endBoldItalic);
     } else if (self.getState() == State.leavingcode) {
         _ = try self.popState();
+        if (self.peek("\n") and !self.peek("\n\n")) {
+            self.pending_element = mkTextElementWithData(" ");
+        }
         return mkElement(ElemType.endCode);
     } else if (self.getState() == State.inlink) {
         self.setState(State.inlinktitle);
@@ -911,11 +914,13 @@ fn processParagraph(self: *Iterator) !Element {
                     return mkElement(ElemType.startBoldItalic);
                 }
                 break;
-            } else if (self.peek("***")) {
-                if (self.atmark()) {
+            } else if (self.peek("___")) {
+                if (self.atmark() and !self.peekAfter(" ", -1) and !self.peekAfter("\n", -1)) {
                     self.skipChars(3);
                     self.pushState(State.inbolditalicalt);
                     return mkElement(ElemType.startBoldItalic);
+                } else {
+                    _ = self.getNextChar();
                 }
                 break;
             } else if (self.peek("**")) {
@@ -925,18 +930,13 @@ fn processParagraph(self: *Iterator) !Element {
                     return mkElement(ElemType.startBold);
                 }
                 break;
-            } else if (self.peek("___")) {
-                if (self.atmark()) {
-                    self.skipChars(3);
-                    self.pushState(State.inbolditalicalt);
-                    return mkElement(ElemType.startBoldItalic);
-                }
-                break;
             } else if (self.peek("__")) {
-                if (self.atmark()) {
+                if (self.atmark() and !self.peekAfter(" ", -1) and !self.peekAfter("\n", -1)) {
                     self.skipChars(2);
                     self.pushState(State.inboldalt);
                     return mkElement(ElemType.startBold);
+                } else {
+                    _ = self.getNextChar();
                 }
                 break;
             } else if (self.peek("*")) {
@@ -947,15 +947,17 @@ fn processParagraph(self: *Iterator) !Element {
                 }
                 break;
             } else if (self.peek("_")) {
-                if (self.atmark()) {
+                if (self.atmark() and !self.peekAfter(" ", -1) and !self.peekAfter("\n", -1)) {
                     self.skipChars(1);
                     self.pushState(State.initalicalt);
                     return mkElement(ElemType.startItalic);
+                } else {
+                    _ = self.getNextChar();
                 }
                 break;
             } else if (self.peek("`")) {
                 if (self.atmark()) {
-                    self.skipChars(2);
+                    self.skipChars(1);
                     self.pushState(State.incode);
                     return mkElement(ElemType.startCode);
                 }

@@ -51,12 +51,12 @@ The reference used to the markdeown syntax is <https://www.markdownguide.org/bas
 At the moment, the following markdown tags are supported:
 
 - ordinary paragraphs
-- headings (level 1 to 6)
-- blockquotes (partial implementation)
 - emphasis (bold, italic, bold+italic)
 - code and code block (using four spaces)
-- horizontal rule
 - linebreak (as trailing spaces)
+- headings (level 1 to 6)
+- horizontal rule
+- blockquotes (partial implementation)
 - links and URLs/email addresses
 - unordered list (one level°)
 

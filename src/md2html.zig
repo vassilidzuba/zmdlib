@@ -277,6 +277,8 @@ fn copyHeading(heading: []u8, data: []const u8) []const u8 {
         } else if (ch >= 'A' and ch <= 'Z') {
             const ch2 = ch + ('a' - 'A');
             heading[pos] = ch2;
+        } else if (ch == ',') {
+            heading[pos] = '.';
         } else {
             heading[pos] = ch;
         }

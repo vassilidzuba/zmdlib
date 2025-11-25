@@ -94,6 +94,111 @@ test "nonreg bolditalic" {
     try runTest(in, out);
 }
 
+test "nonreg inline code" {
+    const in =
+        \\Lorem `ipsum`
+        \\dolor `si` amet.
+    ;
+    const out =
+        \\<p>Lorem <code>ipsum</code> dolor <code>si</code> amet.</p>
+        \\
+    ;
+
+    try runTest(in, out);
+}
+
+test "nonreg codeblock" {
+    const in =
+        \\Lorem ipsum
+        \\
+        \\    dolor si amet,
+        \\    consectetur adipiscing elit,
+        \\
+        \\sed do eiusmod tempor incididunt
+    ;
+    const out =
+        \\<p>Lorem ipsum</p>
+        \\<pre><code>dolor si amet,
+        \\consectetur adipiscing elit,</code></pre>
+        \\<p>sed do eiusmod tempor incididunt</p>
+        \\
+    ;
+
+    try runTest(in, out);
+}
+
+test "nonreg linebreak" {
+    const in =
+        "Lorem ipsum    \ndolor si amet.";
+    const out =
+        \\<p>Lorem ipsum
+        \\<br />dolor si amet.</p>
+        \\
+    ;
+
+    try runTest(in, out);
+}
+
+test "nonreg headings" {
+    const in =
+        \\# Lorem ipsumdolor si amet,
+        \\
+        \\## consectetur adipiscing elit,
+        \\
+        \\### sed do eiusmod tempor incididunt
+        \\
+        \\#### ut labore et dolore magna aliqua.
+        \\
+        \\##### Ut enim ad minim veniam,
+        \\
+        \\###### quis nostrud exercitation ullamco laboris nisi
+        \\
+        \\####### ut aliquip ex ea commodo consequat.
+    ;
+    const out =
+        \\<h1 id="lorem-ipsumdolor-si-amet.">Lorem ipsumdolor si amet,</h1>
+        \\<h2 id="consectetur-adipiscing-elit.">consectetur adipiscing elit,</h2>
+        \\<h3 id="sed-do-eiusmod-tempor-incididunt">sed do eiusmod tempor incididunt</h3>
+        \\<h4 id="ut-labore-et-dolore-magna-aliqua.">ut labore et dolore magna aliqua.</h4>
+        \\<h5 id="ut-enim-ad-minim-veniam.">Ut enim ad minim veniam,</h5>
+        \\<h6 id="quis-nostrud-exercitation-ullamco-laboris-nisi">quis nostrud exercitation ullamco laboris nisi</h6>
+        \\<p>####### ut aliquip ex ea commodo consequat.</p>
+        \\
+    ;
+
+    try runTest(in, out);
+}
+
+test "nonreg horizontal rule" {
+    const in =
+        \\Lorem ipsum dolor si amet,
+        \\
+        \\***
+        \\
+        \\consectetur adipiscing elit,
+        \\
+        \\---
+        \\
+        \\sed do eiusmod tempor incididunt
+        \\
+        \\___
+        \\
+        \\ut labore et dolore magna aliqua.
+    ;
+    const out =
+        \\<p>Lorem ipsum dolor si amet,</p>
+        \\<hr />
+        \\<p>consectetur adipiscing elit,</p>
+        \\<hr />
+        \\<p>sed do eiusmod tempor incididunt</p>
+        \\<hr />
+        \\<p>ut labore et dolore magna aliqua.</p>
+        \\
+    ;
+
+    try runTest(in, out);
+}
+
 fn runTest(in: []const u8, out: []const u8) !void {
     const ta = std.testing.allocator;
     const tmppath = "/tmp/out.md";

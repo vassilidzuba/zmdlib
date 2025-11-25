@@ -17,6 +17,7 @@ pub const XmlWriter = struct {
     file: std.fs.File = undefined,
     stack: std.ArrayList([]const u8),
     state: XmlWriterState = .start,
+    blocklevel: bool = false,
 
     pub fn startDoc(self: *XmlWriter) !void {
         self.stack.clearRetainingCapacity();
@@ -36,7 +37,10 @@ pub const XmlWriter = struct {
             _ = try self.file.write(">");
         }
         if (self.state == .instarttagemptyelement) {
-            _ = try self.file.write("/>");
+            _ = try self.file.write(" />");
+            if (self.blocklevel) {
+                _ = try self.file.write("\n");
+            }
         }
         if (blocklevel) {
             _ = try self.file.write("\n");
@@ -53,14 +57,15 @@ pub const XmlWriter = struct {
             _ = try self.file.write(">");
         }
         if (self.state == .instarttagemptyelement) {
-            _ = try self.file.write("/>");
-        }
-        if (blocklevel) {
-            _ = try self.file.write("\n");
+            _ = try self.file.write(" />");
+            if (self.blocklevel) {
+                _ = try self.file.write("\n");
+            }
         }
         _ = try self.file.write("<");
         _ = try self.file.write(tag);
         self.state = .instarttagemptyelement;
+        self.blocklevel = blocklevel;
     }
 
     pub fn attribute(self: *XmlWriter, name: []const u8, value: []const u8) !void {
@@ -77,7 +82,10 @@ pub const XmlWriter = struct {
             self.state = .start;
         }
         if (self.state == .instarttagemptyelement) {
-            _ = try self.file.write("/>");
+            _ = try self.file.write(" />");
+            if (self.blocklevel) {
+                _ = try self.file.write("\n");
+            }
             self.state = .start;
         }
         const tagopt = self.stack.pop();
@@ -99,7 +107,10 @@ pub const XmlWriter = struct {
             self.state = .start;
         }
         if (self.state == .instarttagemptyelement) {
-            _ = try self.file.write("/>");
+            _ = try self.file.write(" />");
+            if (self.blocklevel) {
+                _ = try self.file.write("\n");
+            }
             self.state = .start;
         }
         try writeProtectedText(data, self.file);
