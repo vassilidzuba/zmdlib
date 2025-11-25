@@ -1,14 +1,41 @@
 const std = @import("std");
+const cli = @import("cli");
 const httpz = @import("httpz");
 const zmdlib = @import("zmdlib");
 
-pub fn main() !void {
-    std.debug.print("starting to wait for requests\n", .{});
+var config = struct {
+    help: ?bool = false,
+    port: ?[:0]const u8 = null,
+}{};
 
+pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
 
-    var server = try httpz.Server(void).init(allocator, .{ .port = 8080 }, {});
+    const command: cli.Command = .{
+        .desc = "server converting markdown to html",
+        .options = &.{
+            .{ .help = "display this help", .short_name = 'h', .long_name = "help", .ref = cli.ValueRef{ .boolean = &config.help } },
+            .{ .help = "port number", .short_name = 'p', .long_name = "port", .ref = cli.ValueRef{ .string = &config.port } },
+        },
+        .exec = runserver,
+    };
+
+    try cli.parseCommandLine(allocator, &command, cli.ParserOpts{});
+
+    if (config.help) |help| {
+        if (help) {
+            cli.printHelp(command);
+            return;
+        }
+    }
+}
+
+fn runserver(allocator: std.mem.Allocator) !void {
+    const port = try getPort();
+    std.debug.print("starting to wait for requests on port {d}\n", .{port});
+
+    var server = try httpz.Server(void).init(allocator, .{ .port = port }, {});
     defer {
         server.stop();
         server.deinit();
@@ -21,8 +48,16 @@ pub fn main() !void {
     try server.listen();
 }
 
+fn getPort() !u16 {
+    if (config.port) |port| {
+        return try std.fmt.parseInt(u16, port, 10);
+    } else {
+        return 8080;
+    }
+}
+
 fn toHtml(req: *httpz.Request, res: *httpz.Response) !void {
-    // TODO/ shout be improved !!!
+    // TODO/ shout be improved to allow some parralelism!!!
     const tempfilename = "/tmp/tohtmlsrv.md";
 
     if (req.body()) |body| {

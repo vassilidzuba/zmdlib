@@ -71,6 +71,20 @@ Use is :
 
 The option `-s` / `--snippet` prevents froml outputting the heading tags.
 
+# the program tohtml
+
+This program is a HTTP server allowing to convert markdown text into html file.
+To launch it, use :
+
+    tohtmlsrv [[ --port | -p]  PORT]?
+
+The option `-p` / `--port` allows to choose the HTTP port. Ther default is 8080.
+
+The path to be used is `/tohtml`:
+
+    curl -X POST -H 'Content-Type: text/markdown' --data-binary @foo.md  http://localhost:8080/tohtml
+
+
 ## TODO
 
 - add titles to links
