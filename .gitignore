@@ -6,3 +6,4 @@ testdata/ref
 *.o
 *.sh
 nonreg.txt
+send.sh

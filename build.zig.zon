@@ -8,6 +8,10 @@
             .url = "git+https://github.com/vassilidzuba/zcliconfig.git#3a04c14ed2fd944897844124c55156b7401db2e7",
             .hash = "zcliconfig-0.0.1-XufzHFJmAAACIDq0CGUCKRVBUA7Vvz4OMbQNGx24uEhn",
         },
+        .httpz = .{
+            .url = "git+https://github.com/karlseguin/http.zig?ref=master#a4477b1dbdc5b820fd4ad301797ca6399f7eb6e4",
+            .hash = "httpz-0.0.0-PNVzrBgtBwCVkSJyophIX6WHwDR0r8XhBGQr96Kk-1El",
+        },
     },
     .paths = .{
         "build.zig",

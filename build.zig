@@ -29,6 +29,7 @@ pub fn build(b: *std.Build) void {
     const Program = struct {
         name: [:0]const u8,
         path: [:0]const u8,
+        with_httpz: bool = false,
     };
 
     const programs = [_]Program{
@@ -36,9 +37,18 @@ pub fn build(b: *std.Build) void {
             .name = "tohtml",
             .path = "tools/tohtml.zig",
         },
+        .{
+            .name = "tohtmlsrv",
+            .path = "tools/tohtmlsrv.zig",
+            .with_httpz = true,
+        },
     };
 
     const cli = b.dependency("cli", .{});
+    const httpz = b.dependency("httpz", .{
+        .target = target,
+        .optimize = optimize,
+    });
 
     for (programs) |prog| {
         const program_mod = b.addModule(prog.name, .{
@@ -53,6 +63,10 @@ pub fn build(b: *std.Build) void {
         });
         program.root_module.addImport("zmdlib", lib_mod);
         program.root_module.addImport("cli", cli.module("zcliconfig"));
+
+        if (prog.with_httpz) {
+            program.root_module.addImport("httpz", httpz.module("httpz"));
+        }
 
         b.installArtifact(program);
         b.default_step.dependOn(&program.step);
