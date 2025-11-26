@@ -91,3 +91,8 @@ The path to be used is `/tohtml`:
 - support emphasis over several lines
 - normalize spaces
 - embedded lists
+
+## Dependencies
+
+- to parse CLI parameters: <https://github.com/vassilidzuba/zcliconfig.git>
+- web server: <https://github.com/karlseguin/http.zig>
