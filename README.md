@@ -83,7 +83,23 @@ The option `-p` / `--port` allows to choose the HTTP port. Ther default is 8080.
 The path to be used is `/tohtml`:
 
     curl -X POST -H 'Content-Type: text/markdown' --data-binary @foo.md  http://localhost:8080/tohtml
+    
+# build .deb package
 
+To produce a `.deb` package, one need to :
+
+- choose the version number
+- change, if needed, the version in :
+
+  - the name of the directory `tohtml_0.0-1`
+  - the changelog in `tohtml_0.0-1/DEBIAN/changelog`
+  - the control file in `tohtml_0.0-1/DEBIAN/control`
+
+- run (as root) build_deb.sh
+
+Note: you can, of course, build the package when in Debian or a dDebian-based 
+distribution, but note that dpkg exists also in Archlinux (for building
+packages, not install them !).
 
 ## TODO
 

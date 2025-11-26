@@ -4,6 +4,8 @@ testdata/in
 testdata/out
 testdata/ref
 *.o
-*.sh
+send.sh
+fetch.sh
+run_nonreg.sh
 nonreg.txt
 send.sh
